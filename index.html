@@ -578,6 +578,56 @@ let micDuration = 10;
 
 function setMicProgress(p){ document.getElementById("micProgressBar").style.width = Math.max(0,Math.min(100,p))+"%"; }
 
+function browserMicErrorMessage(err){
+  const name = err && err.name ? err.name : "";
+  const msg = err && err.message ? err.message : "";
+  if(name === "NotAllowedError" || name === "PermissionDeniedError"){
+    return "Permesso microfono negato. In Safari apri Impostazioni/Sito web → Microfono e consenti l’accesso.";
+  }
+  if(name === "NotFoundError" || name === "DevicesNotFoundError"){
+    return "Nessun microfono trovato. Controlla che il microfono sia collegato e selezionato nelle impostazioni di sistema.";
+  }
+  if(name === "NotReadableError" || name === "TrackStartError"){
+    return "Il microfono è occupato da un’altra app o non può essere avviato. Chiudi altre app audio e riprova.";
+  }
+  if(name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError"){
+    return "Il browser non accetta le impostazioni audio richieste. Riprovo con impostazioni compatibili.";
+  }
+  return (msg || name || "errore sconosciuto");
+}
+
+function isLocalOrSecure(){
+  return window.isSecureContext || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+}
+
+async function openMicrophoneStream(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    throw new Error("getUserMedia non è supportato da questo browser.");
+  }
+  try{
+    return await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+    });
+  }catch(err){
+    // Safari/iOS è più affidabile con vincoli semplici.
+    if(err && (err.name === "OverconstrainedError" || err.name === "ConstraintNotSatisfiedError" || err.name === "NotReadableError")){
+      return await navigator.mediaDevices.getUserMedia({ audio:true });
+    }
+    throw err;
+  }
+}
+
+async function createRunningAudioContext(){
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if(!AudioCtx) throw new Error("AudioContext non è supportato da questo browser.");
+  const ctx = new AudioCtx();
+  if(ctx.state === "suspended"){
+    await ctx.resume();
+  }
+  return ctx;
+}
+
+
 function buildKeyResultHTML(top, sourceLabel){
   return `
     <p class="result">Tonalità stimata da ${sourceLabel}: ${NAMES[top[0].root]} ${top[0].mode}</p>
@@ -607,24 +657,38 @@ async function startMicAnalysis(){
   setMicProgress(0);
   micDuration = +document.getElementById("micSeconds").value || 10;
   micChroma = new Array(12).fill(0); micFrames=0; micVoiced=0;
+
+  if(!isLocalOrSecure()){
+    status.textContent = "Safari e gli altri browser permettono il microfono solo da HTTPS o da localhost. Pubblica il file su HTTPS oppure aprilo da un server locale.";
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    status.textContent = "Microfono non supportato da questo browser. Aggiorna Safari oppure usa Chrome/Edge/Firefox.";
+    return;
+  }
+
   status.textContent = "Richiedo accesso al microfono...";
+  document.getElementById("startMicBtn").disabled = true;
+  document.getElementById("stopMicBtn").disabled = false;
+
   try{
-    micStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
-    });
-    micCtx = new (window.AudioContext || window.webkitAudioContext)();
+    micStream = await openMicrophoneStream();
+    micCtx = await createRunningAudioContext();
+
     const source = micCtx.createMediaStreamSource(micStream);
     micAnalyser = micCtx.createAnalyser();
     micAnalyser.fftSize = 4096;
     source.connect(micAnalyser);
+
     const buffer = new Float32Array(micAnalyser.fftSize);
     micStartTime = performance.now();
-    document.getElementById("startMicBtn").disabled = true;
-    document.getElementById("stopMicBtn").disabled = false;
     status.textContent = "Ascolto in corso...";
 
     function tick(){
-      if(!micAnalyser) return;
+      if(!micAnalyser || !micCtx) return;
+      if(micCtx.state === "suspended"){
+        micCtx.resume().catch(()=>{});
+      }
       micAnalyser.getFloatTimeDomainData(buffer);
       const f = estimatePitch(buffer, micCtx.sampleRate);
       micFrames++;
@@ -644,7 +708,7 @@ async function startMicAnalysis(){
     }
     tick();
   }catch(err){
-    status.textContent = "Microfono non disponibile o permesso negato: " + err.message;
+    status.textContent = "Microfono non disponibile: " + browserMicErrorMessage(err);
     setMicProgress(0);
     stopMicTracks();
   }
@@ -721,7 +785,7 @@ async function startTabAudioAnalysis(){
       status.textContent = "Non è arrivato audio dalla scheda. Riprova selezionando una scheda Chrome e spuntando “Condividi audio della scheda”.";
       return;
     }
-    tabAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    tabAudioCtx = await createRunningAudioContext();
     const source = tabAudioCtx.createMediaStreamSource(tabAudioStream);
     tabAudioAnalyser = tabAudioCtx.createAnalyser();
     tabAudioAnalyser.fftSize = 4096;
@@ -798,6 +862,13 @@ document.getElementById("stopMicBtn").onclick = ()=>{
   stopMicTracks();
   document.getElementById("micStatus").textContent = "Microfono fermato.";
   setMicProgress(0);
+};
+
+document.getElementById("startTabAudioBtn").onclick = startTabAudioAnalysis;
+document.getElementById("stopTabAudioBtn").onclick = ()=>{
+  stopTabAudioTracks();
+  document.getElementById("tabAudioStatus").textContent = "Analisi scheda fermata.";
+  setTabAudioProgress(0);
 };
 
 </script>
