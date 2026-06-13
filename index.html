@@ -121,10 +121,38 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
       <button id="stopMicBtn" class="secondary" disabled>Ferma microfono</button>
     </div>
   </div>
-  <p class="hint">Funzione aggiunta: resta disponibile anche l’analisi MP3 sopra. Consenti il microfono dal browser e fai suonare il brano o lo strumento vicino al microfono.</p>
+  <p class="hint">Consenti il microfono dal browser e fai suonare lo strumento o una cassa esterna vicino al microfono. Se la canzone sta suonando nello stesso PC/browser, usa sotto “Analisi audio da scheda”: evita che il player venga interrotto.</p>
   <div id="micStatus" class="small"></div>
   <div class="meter"><div id="micProgressBar" class="bar"></div></div>
   <div id="micResult"></div>
+</section>
+
+
+<section class="panel warning">
+  <h2>Analisi audio da scheda/browser <span class="small">(consigliata su PC)</span></h2>
+  <div class="controls">
+    <div>
+      <label for="tabSeconds">Durata ascolto</label>
+      <select id="tabSeconds">
+        <option value="6">6 secondi</option>
+        <option value="10" selected>10 secondi</option>
+        <option value="15">15 secondi</option>
+        <option value="20">20 secondi</option>
+      </select>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="startTabAudioBtn">Analizza audio della scheda</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="stopTabAudioBtn" class="secondary" disabled>Ferma analisi scheda</button>
+    </div>
+  </div>
+  <p class="hint">Per analizzare una canzone che suona in una pagina web, usa questa funzione invece del microfono. Su Chrome da PC scegli la scheda dove sta suonando la musica e attiva “Condividi audio della scheda”. Il microfono resta utile per strumenti reali o musica da una cassa esterna.</p>
+  <div id="tabAudioStatus" class="small"></div>
+  <div class="meter"><div id="tabAudioProgressBar" class="bar"></div></div>
+  <div id="tabAudioResult"></div>
 </section>
 
 <section id="webKeyPanel" class="panel warning" style="display:none">
@@ -652,6 +680,117 @@ function finishMicAnalysis(){
   document.getElementById("useDetectedBtn").disabled = false;
   status.textContent = "Analisi microfono completata.";
   result.innerHTML = buildKeyResultHTML(top, "microfono");
+}
+
+
+function setTabAudioProgress(v){
+  const bar = document.getElementById("tabAudioProgressBar");
+  if(bar) bar.style.width = Math.max(0, Math.min(100, v)) + "%";
+}
+
+let tabAudioStream = null;
+let tabAudioCtx = null;
+let tabAudioAnalyser = null;
+let tabAudioAnimation = null;
+let tabAudioChroma = new Array(12).fill(0);
+let tabAudioFrames = 0;
+let tabAudioVoiced = 0;
+let tabAudioStartTime = 0;
+let tabAudioDuration = 10;
+
+async function startTabAudioAnalysis(){
+  const status = document.getElementById("tabAudioStatus");
+  const result = document.getElementById("tabAudioResult");
+  result.innerHTML = "";
+  setTabAudioProgress(0);
+  tabAudioDuration = +document.getElementById("tabSeconds").value || 10;
+  tabAudioChroma = new Array(12).fill(0); tabAudioFrames = 0; tabAudioVoiced = 0;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+    status.textContent = "Analisi audio della scheda non disponibile in questo browser. Usa Chrome/Edge da PC oppure l’analisi MP3.";
+    return;
+  }
+  status.textContent = "Scegli la scheda dove sta suonando la musica e attiva “Condividi audio della scheda”.";
+  try{
+    tabAudioStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+    });
+    const audioTracks = tabAudioStream.getAudioTracks();
+    if(!audioTracks || audioTracks.length===0){
+      stopTabAudioTracks();
+      status.textContent = "Non è arrivato audio dalla scheda. Riprova selezionando una scheda Chrome e spuntando “Condividi audio della scheda”.";
+      return;
+    }
+    tabAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = tabAudioCtx.createMediaStreamSource(tabAudioStream);
+    tabAudioAnalyser = tabAudioCtx.createAnalyser();
+    tabAudioAnalyser.fftSize = 4096;
+    source.connect(tabAudioAnalyser);
+    const buffer = new Float32Array(tabAudioAnalyser.fftSize);
+    tabAudioStartTime = performance.now();
+    document.getElementById("startTabAudioBtn").disabled = true;
+    document.getElementById("stopTabAudioBtn").disabled = false;
+    status.textContent = "Analisi audio scheda in corso...";
+
+    function tick(){
+      if(!tabAudioAnalyser) return;
+      tabAudioAnalyser.getFloatTimeDomainData(buffer);
+      const f = estimatePitch(buffer, tabAudioCtx.sampleRate);
+      tabAudioFrames++;
+      if(f){
+        const midi = freqToMidi(f);
+        const pc = mod(Math.round(midi));
+        tabAudioChroma[pc] += 1;
+        tabAudioVoiced++;
+      }
+      const elapsed = (performance.now() - tabAudioStartTime)/1000;
+      setTabAudioProgress(100 * elapsed / tabAudioDuration);
+      if(elapsed >= tabAudioDuration){
+        finishTabAudioAnalysis();
+      }else{
+        tabAudioAnimation = requestAnimationFrame(tick);
+      }
+    }
+    tick();
+  }catch(err){
+    status.textContent = "Analisi scheda annullata o non disponibile: " + (err.message || err.name);
+    setTabAudioProgress(0);
+    stopTabAudioTracks();
+  }
+}
+
+function stopTabAudioTracks(){
+  if(tabAudioAnimation) cancelAnimationFrame(tabAudioAnimation);
+  tabAudioAnimation = null;
+  if(tabAudioStream){ tabAudioStream.getTracks().forEach(t=>t.stop()); }
+  tabAudioStream = null;
+  if(tabAudioCtx){ tabAudioCtx.close().catch(()=>{}); }
+  tabAudioCtx = null; tabAudioAnalyser = null;
+  const s = document.getElementById("startTabAudioBtn");
+  const e = document.getElementById("stopTabAudioBtn");
+  if(s) s.disabled = false;
+  if(e) e.disabled = true;
+}
+
+function finishTabAudioAnalysis(){
+  const status = document.getElementById("tabAudioStatus");
+  const result = document.getElementById("tabAudioResult");
+  stopTabAudioTracks();
+  setTabAudioProgress(100);
+  if(tabAudioVoiced < 8){
+    status.textContent = "Non riesco a stimare la tonalità: audio della scheda troppo basso, percussivo o poco definito.";
+    return;
+  }
+  const top = rankChroma(tabAudioChroma);
+  if(!top){
+    status.textContent = "Non riesco a stimare la tonalità dall’audio della scheda.";
+    return;
+  }
+  detectedRoot = top[0].root;
+  detectedMode = top[0].mode;
+  document.getElementById("useDetectedBtn").disabled = false;
+  status.textContent = "Analisi audio scheda completata.";
+  result.innerHTML = buildKeyResultHTML(top, "scheda/browser");
 }
 
 document.getElementById("startMicBtn").onclick = startMicAnalysis;
