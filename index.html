@@ -564,11 +564,14 @@ document.getElementById("analyzeBtn").onclick=()=>analyzeAudio().catch(err=>{
 document.getElementById("useDetectedBtn").onclick=()=>{ if(detectedRoot!==null) applyDetected(detectedRoot, detectedMode); };
 
 
-// --- Analisi tonalità da microfono ---
+// --- Analisi tonalità da microfono / scheda: versione musicale migliorata ---
+// Nota tecnica: il vecchio metodo cercava una sola nota per frame. Qui usiamo invece
+// un cromagramma spettrale: sommiamo l'energia di tutte le note presenti, con pesi
+// musicali sugli armonici. È molto più stabile su accordi, basi, voce e strumenti reali.
+
 let micStream = null;
 let micCtx = null;
 let micAnalyser = null;
-let micTimer = null;
 let micAnimation = null;
 let micChroma = new Array(12).fill(0);
 let micFrames = 0;
@@ -576,7 +579,9 @@ let micVoiced = 0;
 let micStartTime = 0;
 let micDuration = 10;
 
-function setMicProgress(p){ document.getElementById("micProgressBar").style.width = Math.max(0,Math.min(100,p))+"%"; }
+function setMicProgress(p){
+  document.getElementById("micProgressBar").style.width = Math.max(0,Math.min(100,p))+"%";
+}
 
 function browserMicErrorMessage(err){
   const name = err && err.name ? err.name : "";
@@ -591,7 +596,7 @@ function browserMicErrorMessage(err){
     return "Il microfono è occupato da un’altra app o non può essere avviato. Chiudi altre app audio e riprova.";
   }
   if(name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError"){
-    return "Il browser non accetta le impostazioni audio richieste. Riprovo con impostazioni compatibili.";
+    return "Il browser non accetta le impostazioni audio richieste.";
   }
   return (msg || name || "errore sconosciuto");
 }
@@ -600,26 +605,9 @@ function isLocalOrSecure(){
   return window.isSecureContext || location.hostname === "localhost" || location.hostname === "127.0.0.1";
 }
 
-async function openMicrophoneStream(){
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    throw new Error("getUserMedia non è supportato da questo browser.");
-  }
-  try{
-    return await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
-    });
-  }catch(err){
-    // Safari/iOS è più affidabile con vincoli semplici.
-    if(err && (err.name === "OverconstrainedError" || err.name === "ConstraintNotSatisfiedError" || err.name === "NotReadableError")){
-      return await navigator.mediaDevices.getUserMedia({ audio:true });
-    }
-    throw err;
-  }
-}
-
 async function createRunningAudioContext(){
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if(!AudioCtx) throw new Error("AudioContext non è supportato da questo browser.");
+  if(!AudioCtx) throw new Error("AudioContext non supportato da questo browser.");
   const ctx = new AudioCtx();
   if(ctx.state === "suspended"){
     await ctx.resume();
@@ -627,27 +615,119 @@ async function createRunningAudioContext(){
   return ctx;
 }
 
+async function openMicrophoneStream(){
+  // Safari è più stabile con vincoli semplici. Se il browser accetta vincoli avanzati,
+  // li usiamo solo come tentativo iniziale; poi ricadiamo su audio:true.
+  try{
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+  }catch(err){
+    if(err && (err.name === "OverconstrainedError" || err.name === "ConstraintNotSatisfiedError")){
+      return await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+    // Su alcuni Safari l'errore non è classificato bene: facciamo comunque un fallback.
+    try{
+      return await navigator.mediaDevices.getUserMedia({ audio: true });
+    }catch(err2){
+      throw err2 || err;
+    }
+  }
+}
 
-function buildKeyResultHTML(top, sourceLabel){
+function buildKeyResultHTML(top, sourceLabel, confidence){
   return `
-    <p class="result">Tonalità stimata da ${sourceLabel}: ${NAMES[top[0].root]} ${top[0].mode}</p>
+    <p class="result">Tonalità stimata da ${sourceLabel}: ${NAMES[top[0].root]} ${top[0].mode}
+      <span class="small">confidenza circa ${confidence}%</span></p>
     <table><thead><tr><th>Possibilità</th><th>Punteggio</th><th>Azione</th></tr></thead><tbody>
       ${top.map(c=>`<tr><td>${NAMES[c.root]} ${c.mode}</td><td>${c.score.toFixed(3)}</td><td><button class="secondary" onclick="applyDetected(${c.root}, \'${c.mode}\')">Usa ${NAMES[c.root]}</button></td></tr>`).join("")}
     </tbody></table>
-    <p class="hint">Per tonalità minori usa la tonica stimata e consulta le scale minori, pentatonica minore e blues minore.</p>`;
+    <p class="hint">Consiglio musicale: fai ascoltare almeno 10–20 secondi con accordi o basso chiaro. Se ascolti solo una melodia, il sistema può stimare una scala plausibile ma non sempre la tonalità armonica reale.</p>`;
 }
 
 function rankChroma(chroma){
   const total = chroma.reduce((a,b)=>a+b,0);
-  if(total===0) return null;
+  if(total <= 0) return null;
   const normalized = chroma.map(x=>x/total);
+
+  // Piccola levigatura cromatica: evita che un solo armonico troppo forte domini tutto.
+  const smooth = normalized.map((v,i)=> v*0.82 + normalized[mod(i-1)]*0.09 + normalized[mod(i+1)]*0.09);
+
   let candidates=[];
   for(let r=0;r<12;r++){
-    candidates.push({root:r, mode:"maggiore", score:corr(majorProfile,normalized,r)});
-    candidates.push({root:r, mode:"minore", score:corr(minorProfile,normalized,r)});
+    candidates.push({root:r, mode:"maggiore", score:corr(majorProfile,smooth,r)});
+    candidates.push({root:r, mode:"minore", score:corr(minorProfile,smooth,r)});
   }
+
+  // Bonus musicale leggero: se la tonica è davvero presente nel cromagramma, alziamo il risultato.
+  candidates = candidates.map(c=>{
+    const tonicEnergy = smooth[c.root] || 0;
+    const fifthEnergy = smooth[mod(c.root+7)] || 0;
+    const thirdEnergy = smooth[mod(c.root+(c.mode==="maggiore" ? 4 : 3))] || 0;
+    return {...c, score: c.score + tonicEnergy*0.22 + fifthEnergy*0.06 + thirdEnergy*0.08};
+  });
+
   candidates.sort((a,b)=>b.score-a.score);
   return candidates.slice(0,5);
+}
+
+function keyConfidence(top, voiced){
+  if(!top || top.length < 2) return 0;
+  const gap = top[0].score - top[1].score;
+  const absolute = Math.max(0, top[0].score);
+  const voicedBonus = Math.min(1, voiced / 80);
+  return Math.round(Math.max(8, Math.min(96, 35 + gap*260 + absolute*18 + voicedBonus*18)));
+}
+
+function addSpectralChromaFromAnalyser(analyser, audioCtx, chroma){
+  const n = analyser.frequencyBinCount;
+  const bins = new Float32Array(n);
+  analyser.getFloatFrequencyData(bins);
+
+  const nyquist = audioCtx.sampleRate / 2;
+  let added = 0;
+  let frameEnergy = 0;
+
+  // Limiti musicali: sotto 55 Hz rumble, sopra 4200 Hz armonici/fruscio spesso ingannano.
+  for(let i=1; i<n; i++){
+    const freq = i * nyquist / n;
+    if(freq < 55 || freq > 4200) continue;
+
+    const db = bins[i];
+    if(!isFinite(db) || db < -82) continue;
+
+    // Converte dB in energia e applica un rolloff: meno peso agli acuti/fruscio.
+    let energy = Math.pow(10, db / 20);
+    energy *= 1 / Math.sqrt(Math.max(1, freq / 440));
+
+    if(energy < 0.00008) continue;
+
+    const midi = freqToMidi(freq);
+    const nearest = Math.round(midi);
+    const distance = Math.abs(midi - nearest);
+
+    // I bin vicini al centro della nota pesano di più.
+    const tuningWeight = Math.max(0, 1 - distance * 2.4);
+    if(tuningWeight <= 0) continue;
+
+    const pc = mod(nearest);
+    const w = energy * tuningWeight;
+    chroma[pc] += w;
+
+    // Ridistribuzione sugli armonici probabili: una quinta/ottava forte non deve rubare tutta la tonalità.
+    chroma[mod(pc-7)] += w * 0.16;  // possibile fondamentale sotto una quinta
+    chroma[mod(pc-4)] += w * 0.08;  // possibile fondamentale sotto terza maggiore
+    chroma[mod(pc-3)] += w * 0.07;  // possibile fondamentale sotto terza minore
+
+    frameEnergy += energy;
+    added++;
+  }
+
+  return {added, frameEnergy};
 }
 
 async function startMicAnalysis(){
@@ -656,7 +736,9 @@ async function startMicAnalysis(){
   result.innerHTML = "";
   setMicProgress(0);
   micDuration = +document.getElementById("micSeconds").value || 10;
-  micChroma = new Array(12).fill(0); micFrames=0; micVoiced=0;
+  micChroma = new Array(12).fill(0);
+  micFrames = 0;
+  micVoiced = 0;
 
   if(!isLocalOrSecure()){
     status.textContent = "Safari e gli altri browser permettono il microfono solo da HTTPS o da localhost. Pubblica il file su HTTPS oppure aprilo da un server locale.";
@@ -677,27 +759,21 @@ async function startMicAnalysis(){
 
     const source = micCtx.createMediaStreamSource(micStream);
     micAnalyser = micCtx.createAnalyser();
-    micAnalyser.fftSize = 4096;
+    micAnalyser.fftSize = 8192;
+    micAnalyser.smoothingTimeConstant = 0.72;
     source.connect(micAnalyser);
 
-    const buffer = new Float32Array(micAnalyser.fftSize);
     micStartTime = performance.now();
-    status.textContent = "Ascolto in corso...";
+    status.textContent = "Ascolto in corso... suona accordi, basso o una parte armonica chiara.";
 
     function tick(){
       if(!micAnalyser || !micCtx) return;
-      if(micCtx.state === "suspended"){
-        micCtx.resume().catch(()=>{});
-      }
-      micAnalyser.getFloatTimeDomainData(buffer);
-      const f = estimatePitch(buffer, micCtx.sampleRate);
+      if(micCtx.state === "suspended") micCtx.resume().catch(()=>{});
+
+      const frame = addSpectralChromaFromAnalyser(micAnalyser, micCtx, micChroma);
       micFrames++;
-      if(f){
-        const midi = freqToMidi(f);
-        const pc = mod(Math.round(midi));
-        micChroma[pc] += 1;
-        micVoiced++;
-      }
+      if(frame.added > 18 && frame.frameEnergy > 0.004) micVoiced++;
+
       const elapsed = (performance.now() - micStartTime)/1000;
       setMicProgress(100 * elapsed / micDuration);
       if(elapsed >= micDuration){
@@ -720,7 +796,8 @@ function stopMicTracks(){
   if(micStream){ micStream.getTracks().forEach(t=>t.stop()); }
   micStream = null;
   if(micCtx){ micCtx.close().catch(()=>{}); }
-  micCtx = null; micAnalyser = null;
+  micCtx = null;
+  micAnalyser = null;
   document.getElementById("startMicBtn").disabled = false;
   document.getElementById("stopMicBtn").disabled = true;
 }
@@ -730,22 +807,25 @@ function finishMicAnalysis(){
   const result = document.getElementById("micResult");
   stopMicTracks();
   setMicProgress(100);
-  if(micVoiced < 8){
-    status.textContent = "Non riesco a stimare la tonalità: segnale troppo basso, percussivo o poco definito.";
+
+  if(micVoiced < 10){
+    status.textContent = "Non riesco a stimare bene la tonalità: segnale troppo basso o troppo melodico/percussivo. Avvicina la sorgente e fai ascoltare accordi o basso.";
     return;
   }
+
   const top = rankChroma(micChroma);
   if(!top){
     status.textContent = "Non riesco a stimare la tonalità dal microfono.";
     return;
   }
+
   detectedRoot = top[0].root;
   detectedMode = top[0].mode;
+  const confidence = keyConfidence(top, micVoiced);
   document.getElementById("useDetectedBtn").disabled = false;
   status.textContent = "Analisi microfono completata.";
-  result.innerHTML = buildKeyResultHTML(top, "microfono");
+  result.innerHTML = buildKeyResultHTML(top, "microfono", confidence);
 }
-
 
 function setTabAudioProgress(v){
   const bar = document.getElementById("tabAudioProgressBar");
@@ -768,45 +848,43 @@ async function startTabAudioAnalysis(){
   result.innerHTML = "";
   setTabAudioProgress(0);
   tabAudioDuration = +document.getElementById("tabSeconds").value || 10;
-  tabAudioChroma = new Array(12).fill(0); tabAudioFrames = 0; tabAudioVoiced = 0;
+  tabAudioChroma = new Array(12).fill(0);
+  tabAudioFrames = 0;
+  tabAudioVoiced = 0;
+
   if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
     status.textContent = "Analisi audio della scheda non disponibile in questo browser. Usa Chrome/Edge da PC oppure l’analisi MP3.";
     return;
   }
+
   status.textContent = "Scegli la scheda dove sta suonando la musica e attiva “Condividi audio della scheda”.";
   try{
-    tabAudioStream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
-    });
+    tabAudioStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     const audioTracks = tabAudioStream.getAudioTracks();
     if(!audioTracks || audioTracks.length===0){
       stopTabAudioTracks();
       status.textContent = "Non è arrivato audio dalla scheda. Riprova selezionando una scheda Chrome e spuntando “Condividi audio della scheda”.";
       return;
     }
+
     tabAudioCtx = await createRunningAudioContext();
     const source = tabAudioCtx.createMediaStreamSource(tabAudioStream);
     tabAudioAnalyser = tabAudioCtx.createAnalyser();
-    tabAudioAnalyser.fftSize = 4096;
+    tabAudioAnalyser.fftSize = 8192;
+    tabAudioAnalyser.smoothingTimeConstant = 0.72;
     source.connect(tabAudioAnalyser);
-    const buffer = new Float32Array(tabAudioAnalyser.fftSize);
+
     tabAudioStartTime = performance.now();
     document.getElementById("startTabAudioBtn").disabled = true;
     document.getElementById("stopTabAudioBtn").disabled = false;
     status.textContent = "Analisi audio scheda in corso...";
 
     function tick(){
-      if(!tabAudioAnalyser) return;
-      tabAudioAnalyser.getFloatTimeDomainData(buffer);
-      const f = estimatePitch(buffer, tabAudioCtx.sampleRate);
+      if(!tabAudioAnalyser || !tabAudioCtx) return;
+      const frame = addSpectralChromaFromAnalyser(tabAudioAnalyser, tabAudioCtx, tabAudioChroma);
       tabAudioFrames++;
-      if(f){
-        const midi = freqToMidi(f);
-        const pc = mod(Math.round(midi));
-        tabAudioChroma[pc] += 1;
-        tabAudioVoiced++;
-      }
+      if(frame.added > 18 && frame.frameEnergy > 0.004) tabAudioVoiced++;
+
       const elapsed = (performance.now() - tabAudioStartTime)/1000;
       setTabAudioProgress(100 * elapsed / tabAudioDuration);
       if(elapsed >= tabAudioDuration){
@@ -829,7 +907,8 @@ function stopTabAudioTracks(){
   if(tabAudioStream){ tabAudioStream.getTracks().forEach(t=>t.stop()); }
   tabAudioStream = null;
   if(tabAudioCtx){ tabAudioCtx.close().catch(()=>{}); }
-  tabAudioCtx = null; tabAudioAnalyser = null;
+  tabAudioCtx = null;
+  tabAudioAnalyser = null;
   const s = document.getElementById("startTabAudioBtn");
   const e = document.getElementById("stopTabAudioBtn");
   if(s) s.disabled = false;
@@ -841,20 +920,24 @@ function finishTabAudioAnalysis(){
   const result = document.getElementById("tabAudioResult");
   stopTabAudioTracks();
   setTabAudioProgress(100);
-  if(tabAudioVoiced < 8){
-    status.textContent = "Non riesco a stimare la tonalità: audio della scheda troppo basso, percussivo o poco definito.";
+
+  if(tabAudioVoiced < 10){
+    status.textContent = "Non riesco a stimare bene la tonalità: audio troppo basso, percussivo o senza armonia chiara.";
     return;
   }
+
   const top = rankChroma(tabAudioChroma);
   if(!top){
     status.textContent = "Non riesco a stimare la tonalità dall’audio della scheda.";
     return;
   }
+
   detectedRoot = top[0].root;
   detectedMode = top[0].mode;
+  const confidence = keyConfidence(top, tabAudioVoiced);
   document.getElementById("useDetectedBtn").disabled = false;
   status.textContent = "Analisi audio scheda completata.";
-  result.innerHTML = buildKeyResultHTML(top, "scheda/browser");
+  result.innerHTML = buildKeyResultHTML(top, "scheda/browser", confidence);
 }
 
 document.getElementById("startMicBtn").onclick = startMicAnalysis;
