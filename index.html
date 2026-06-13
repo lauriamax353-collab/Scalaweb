@@ -574,6 +574,7 @@ let micCtx = null;
 let micAnalyser = null;
 let micAnimation = null;
 let micChroma = new Array(12).fill(0);
+let micBassChroma = new Array(12).fill(0);
 let micFrames = 0;
 let micVoiced = 0;
 let micStartTime = 0;
@@ -640,90 +641,164 @@ async function openMicrophoneStream(){
 }
 
 function buildKeyResultHTML(top, sourceLabel, confidence){
+  const warning = top[0].confidenceLabel ? `<p class="hint"><b>Nota musicale:</b> ${top[0].confidenceLabel}</p>` : "";
   return `
     <p class="result">Tonalità stimata da ${sourceLabel}: ${NAMES[top[0].root]} ${top[0].mode}
       <span class="small">confidenza circa ${confidence}%</span></p>
-    <table><thead><tr><th>Possibilità</th><th>Punteggio</th><th>Azione</th></tr></thead><tbody>
-      ${top.map(c=>`<tr><td>${NAMES[c.root]} ${c.mode}</td><td>${c.score.toFixed(3)}</td><td><button class="secondary" onclick="applyDetected(${c.root}, \'${c.mode}\')">Usa ${NAMES[c.root]}</button></td></tr>`).join("")}
+    ${warning}
+    <table><thead><tr><th>Possibilità</th><th>Punteggio</th><th>Perché</th><th>Azione</th></tr></thead><tbody>
+      ${top.map(c=>`<tr><td>${NAMES[c.root]} ${c.mode}</td><td>${c.score.toFixed(3)}</td><td class="small">${c.reason || ""}</td><td><button class="secondary" onclick="applyDetected(${c.root}, \'${c.mode}\')">Usa ${NAMES[c.root]}</button></td></tr>`).join("")}
     </tbody></table>
-    <p class="hint">Consiglio musicale: fai ascoltare almeno 10–20 secondi con accordi o basso chiaro. Se ascolti solo una melodia, il sistema può stimare una scala plausibile ma non sempre la tonalità armonica reale.</p>`;
+    <p class="hint">Metodo musicale: pesa prima basso e fondamentali probabili, poi accordi I–IV–V e note della scala. Se fai ascoltare solo una melodia, può suggerire la scala ma non sempre il centro tonale reale.</p>`;
 }
 
-function rankChroma(chroma){
+function normalizeVector(v){
+  const total = v.reduce((a,b)=>a+b,0);
+  return total > 0 ? v.map(x=>x/total) : v.slice();
+}
+function sumPC(v, root, ints){
+  return ints.reduce((s,i)=>s+(v[mod(root+i)] || 0),0);
+}
+function maxPC(v){ let m=0, idx=0; for(let i=0;i<12;i++){ if((v[i]||0)>m){m=v[i];idx=i;} } return {idx, value:m}; }
+
+function keyProfileScore(chroma, root, mode){
+  const majorScale = [0,2,4,5,7,9,11];
+  const minorScale = [0,2,3,5,7,8,10];
+  const harmonicMinorColor = [11]; // sensibile: colore utile, ma non obbligatorio
+  const scale = mode==="maggiore" ? majorScale : minorScale;
+  const triad = mode==="maggiore" ? [0,4,7] : [0,3,7];
+
+  const inScale = sumPC(chroma, root, scale);
+  const outScale = Math.max(0, 1 - inScale);
+  const tonicTriad = sumPC(chroma, root, triad);
+  const dominant = sumPC(chroma, root, [7,11,2]);      // V
+  const subdominant = sumPC(chroma, root, [5,9,0]);    // IV
+  const sixthOrRel = mode==="maggiore" ? (chroma[mod(root+9)]||0) : (chroma[mod(root+8)]||0);
+  const leadingTone = mode==="minore" ? (chroma[mod(root+11)]||0) : 0;
+
+  return (
+    inScale * 1.55 -
+    outScale * 0.90 +
+    tonicTriad * 1.25 +
+    dominant * 0.36 +
+    subdominant * 0.28 +
+    sixthOrRel * 0.10 +
+    leadingTone * 0.10
+  );
+}
+
+function rankChroma(chroma, bassChroma){
   const total = chroma.reduce((a,b)=>a+b,0);
   if(total <= 0) return null;
-  const normalized = chroma.map(x=>x/total);
 
-  // Piccola levigatura cromatica: evita che un solo armonico troppo forte domini tutto.
-  const smooth = normalized.map((v,i)=> v*0.82 + normalized[mod(i-1)]*0.09 + normalized[mod(i+1)]*0.09);
+  const c0 = normalizeVector(chroma);
+  const b0 = bassChroma ? normalizeVector(bassChroma) : new Array(12).fill(0);
+
+  // Smoothing molto leggero: utile per intonazione imprecisa, ma non deve confondere semitoni reali.
+  const smooth = c0.map((v,i)=> v*0.90 + c0[mod(i-1)]*0.05 + c0[mod(i+1)]*0.05);
+  const bassPeak = maxPC(b0);
 
   let candidates=[];
   for(let r=0;r<12;r++){
-    candidates.push({root:r, mode:"maggiore", score:corr(majorProfile,smooth,r)});
-    candidates.push({root:r, mode:"minore", score:corr(minorProfile,smooth,r)});
+    ["maggiore","minore"].forEach(mode=>{
+      const profile = mode==="maggiore" ? majorProfile : minorProfile;
+      const profileCorr = corr(profile, smooth, r);
+
+      const tonicBass = b0[r] || 0;
+      const fifthBass = b0[mod(r+7)] || 0;
+      const fourthBass = b0[mod(r+5)] || 0;
+      const relRoot = mode==="maggiore" ? mod(r+9) : mod(r+3);
+      const relativeBass = b0[relRoot] || 0;
+
+      // Il basso decide il centro più della melodia: tonica forte, dominante utile,
+      // relativa forte senza tonica = sospetto relativo maggiore/minore.
+      const bassScore = tonicBass*2.20 + fifthBass*0.55 + fourthBass*0.28 - Math.max(0, relativeBass-tonicBass)*0.95;
+      const musicalScore = keyProfileScore(smooth, r, mode);
+      const modeThird = smooth[mod(r + (mode==="maggiore" ? 4 : 3))] || 0;
+      const wrongThird = smooth[mod(r + (mode==="maggiore" ? 3 : 4))] || 0;
+      const thirdScore = modeThird*0.45 - wrongThird*0.30;
+
+      const score = profileCorr*0.55 + musicalScore + bassScore + thirdScore;
+      let why = [];
+      if(tonicBass > 0.10) why.push("basso sulla tonica");
+      else if(fifthBass > 0.10) why.push("basso spesso sulla dominante");
+      if(keyProfileScore(smooth,r,mode) > 1.5) why.push("note coerenti con la scala");
+      if(modeThird > wrongThird) why.push(mode==="maggiore" ? "terza maggiore presente" : "terza minore presente");
+      if(relativeBass > tonicBass*1.8 && relativeBass > 0.10) why.push("possibile relativa");
+
+      candidates.push({root:r, mode, score, reason: why.join(", ")});
+    });
   }
 
-  // Bonus musicale leggero: se la tonica è davvero presente nel cromagramma, alziamo il risultato.
-  candidates = candidates.map(c=>{
-    const tonicEnergy = smooth[c.root] || 0;
-    const fifthEnergy = smooth[mod(c.root+7)] || 0;
-    const thirdEnergy = smooth[mod(c.root+(c.mode==="maggiore" ? 4 : 3))] || 0;
-    return {...c, score: c.score + tonicEnergy*0.22 + fifthEnergy*0.06 + thirdEnergy*0.08};
-  });
-
   candidates.sort((a,b)=>b.score-a.score);
-  return candidates.slice(0,5);
+
+  // Se il basso ha un picco netto ma il candidato migliore non lo considera né tonica né dominante,
+  // segnaliamo che il risultato è musicalmente ambiguo invece di fingere certezza.
+  const top = candidates.slice(0,5);
+  if(bassPeak.value > 0.18){
+    const ok = top[0].root===bassPeak.idx || mod(top[0].root+7)===bassPeak.idx || mod(top[0].root+5)===bassPeak.idx;
+    if(!ok) top[0].confidenceLabel = `il basso sembra puntare a ${NAMES[bassPeak.idx]}, quindi verifica anche le alternative in tabella.`;
+  }
+  return top;
 }
 
 function keyConfidence(top, voiced){
   if(!top || top.length < 2) return 0;
   const gap = top[0].score - top[1].score;
-  const absolute = Math.max(0, top[0].score);
-  const voicedBonus = Math.min(1, voiced / 80);
-  return Math.round(Math.max(8, Math.min(96, 35 + gap*260 + absolute*18 + voicedBonus*18)));
+  const voicedBonus = Math.min(1, voiced / 90);
+  const ambiguous = top[0].confidenceLabel ? -18 : 0;
+  return Math.round(Math.max(8, Math.min(94, 28 + gap*42 + voicedBonus*24 + ambiguous)));
 }
 
-function addSpectralChromaFromAnalyser(analyser, audioCtx, chroma){
+function getBinMagnitude(bins, freq, sampleRate){
+  const nyquist = sampleRate / 2;
+  const idx = Math.round(freq / nyquist * bins.length);
+  if(idx < 1 || idx >= bins.length) return 0;
+  const db = bins[idx];
+  if(!isFinite(db) || db < -92) return 0;
+  return Math.pow(10, db / 20);
+}
+
+function addSpectralChromaFromAnalyser(analyser, audioCtx, chroma, bassChroma){
   const n = analyser.frequencyBinCount;
   const bins = new Float32Array(n);
   analyser.getFloatFrequencyData(bins);
 
-  const nyquist = audioCtx.sampleRate / 2;
+  let peak = -120;
+  for(let i=1;i<n;i++) if(isFinite(bins[i]) && bins[i] > peak) peak = bins[i];
+  const gate = Math.max(-88, peak - 52);
+
   let added = 0;
   let frameEnergy = 0;
 
-  // Limiti musicali: sotto 55 Hz rumble, sopra 4200 Hz armonici/fruscio spesso ingannano.
-  for(let i=1; i<n; i++){
-    const freq = i * nyquist / n;
-    if(freq < 55 || freq > 4200) continue;
+  // Analisi per fondamentali candidate, non per bin grezzi:
+  // così una quinta o un armonico forte non viene scambiato automaticamente per tonica.
+  for(let midi=36; midi<=83; midi++){ // Do2 - Si5
+    const f0 = 440 * Math.pow(2, (midi-69)/12);
+    if(f0 < 55 || f0 > 1000) continue;
 
-    const db = bins[i];
-    if(!isFinite(db) || db < -82) continue;
+    let score = 0;
+    let harmonicHits = 0;
+    for(let h=1; h<=6; h++){
+      const f = f0*h;
+      if(f > Math.min(5000, audioCtx.sampleRate/2 - 100)) break;
+      const binDbIndex = Math.round(f / (audioCtx.sampleRate/2) * n);
+      if(binDbIndex < 1 || binDbIndex >= n || bins[binDbIndex] < gate) continue;
+      const mag = getBinMagnitude(bins, f, audioCtx.sampleRate);
+      const weight = 1 / Math.pow(h, 1.18);
+      score += mag * weight;
+      harmonicHits++;
+    }
 
-    // Converte dB in energia e applica un rolloff: meno peso agli acuti/fruscio.
-    let energy = Math.pow(10, db / 20);
-    energy *= 1 / Math.sqrt(Math.max(1, freq / 440));
+    if(harmonicHits < 2 && f0 > 130) continue;
+    if(score < 0.0005) continue;
 
-    if(energy < 0.00008) continue;
-
-    const midi = freqToMidi(freq);
-    const nearest = Math.round(midi);
-    const distance = Math.abs(midi - nearest);
-
-    // I bin vicini al centro della nota pesano di più.
-    const tuningWeight = Math.max(0, 1 - distance * 2.4);
-    if(tuningWeight <= 0) continue;
-
-    const pc = mod(nearest);
-    const w = energy * tuningWeight;
+    const pc = mod(midi);
+    const octaveWeight = f0 < 260 ? 1.15 : f0 < 520 ? 0.85 : 0.55;
+    const w = score * octaveWeight;
     chroma[pc] += w;
-
-    // Ridistribuzione sugli armonici probabili: una quinta/ottava forte non deve rubare tutta la tonalità.
-    chroma[mod(pc-7)] += w * 0.16;  // possibile fondamentale sotto una quinta
-    chroma[mod(pc-4)] += w * 0.08;  // possibile fondamentale sotto terza maggiore
-    chroma[mod(pc-3)] += w * 0.07;  // possibile fondamentale sotto terza minore
-
-    frameEnergy += energy;
+    if(f0 < 300 && bassChroma) bassChroma[pc] += w * 1.6;
+    frameEnergy += w;
     added++;
   }
 
@@ -737,6 +812,7 @@ async function startMicAnalysis(){
   setMicProgress(0);
   micDuration = +document.getElementById("micSeconds").value || 10;
   micChroma = new Array(12).fill(0);
+  micBassChroma = new Array(12).fill(0);
   micFrames = 0;
   micVoiced = 0;
 
@@ -770,7 +846,7 @@ async function startMicAnalysis(){
       if(!micAnalyser || !micCtx) return;
       if(micCtx.state === "suspended") micCtx.resume().catch(()=>{});
 
-      const frame = addSpectralChromaFromAnalyser(micAnalyser, micCtx, micChroma);
+      const frame = addSpectralChromaFromAnalyser(micAnalyser, micCtx, micChroma, micBassChroma);
       micFrames++;
       if(frame.added > 18 && frame.frameEnergy > 0.004) micVoiced++;
 
@@ -813,7 +889,7 @@ function finishMicAnalysis(){
     return;
   }
 
-  const top = rankChroma(micChroma);
+  const top = rankChroma(micChroma, micBassChroma);
   if(!top){
     status.textContent = "Non riesco a stimare la tonalità dal microfono.";
     return;
@@ -837,6 +913,7 @@ let tabAudioCtx = null;
 let tabAudioAnalyser = null;
 let tabAudioAnimation = null;
 let tabAudioChroma = new Array(12).fill(0);
+let tabAudioBassChroma = new Array(12).fill(0);
 let tabAudioFrames = 0;
 let tabAudioVoiced = 0;
 let tabAudioStartTime = 0;
@@ -849,6 +926,7 @@ async function startTabAudioAnalysis(){
   setTabAudioProgress(0);
   tabAudioDuration = +document.getElementById("tabSeconds").value || 10;
   tabAudioChroma = new Array(12).fill(0);
+  tabAudioBassChroma = new Array(12).fill(0);
   tabAudioFrames = 0;
   tabAudioVoiced = 0;
 
@@ -881,7 +959,7 @@ async function startTabAudioAnalysis(){
 
     function tick(){
       if(!tabAudioAnalyser || !tabAudioCtx) return;
-      const frame = addSpectralChromaFromAnalyser(tabAudioAnalyser, tabAudioCtx, tabAudioChroma);
+      const frame = addSpectralChromaFromAnalyser(tabAudioAnalyser, tabAudioCtx, tabAudioChroma, tabAudioBassChroma);
       tabAudioFrames++;
       if(frame.added > 18 && frame.frameEnergy > 0.004) tabAudioVoiced++;
 
@@ -926,7 +1004,7 @@ function finishTabAudioAnalysis(){
     return;
   }
 
-  const top = rankChroma(tabAudioChroma);
+  const top = rankChroma(tabAudioChroma, tabAudioBassChroma);
   if(!top){
     status.textContent = "Non riesco a stimare la tonalità dall’audio della scheda.";
     return;
