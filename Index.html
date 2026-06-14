@@ -115,6 +115,15 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
       </select>
     </div>
     <div>
+      <label for="micSourceMode">Tipo sorgente</label>
+      <select id="micSourceMode">
+        <option value="auto" selected>Automatico / band completa</option>
+        <option value="chords">Basso + accordi</option>
+        <option value="guitar">Chitarra / piano</option>
+        <option value="melody">Voce / melodia singola</option>
+      </select>
+    </div>
+    <div>
       <label>&nbsp;</label>
       <button id="startMicBtn">Ascolta e suggerisci scale</button>
     </div>
@@ -123,7 +132,7 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
       <button id="stopMicBtn" class="secondary" disabled>Ferma microfono</button>
     </div>
   </div>
-  <p class="hint">Obiettivo pratico: trovare scale sicure per improvvisare, non una “verità assoluta”. Fai ascoltare un giro armonico con basso/accordi; se sente solo melodia proporrà pentatoniche e alternative verificabili a orecchio.</p>
+  <p class="hint">Obiettivo pratico: trovare scale sicure per improvvisare, non una “verità assoluta”. I primi istanti calibrano il rumore ambientale; poi fai ascoltare un giro armonico con basso/accordi. Se sente solo melodia proporrà pentatoniche e alternative verificabili a orecchio.</p>
   <div id="micStatus" class="small"></div>
   <div class="meter"><div id="micProgressBar" class="bar"></div></div>
   <div id="micResult"></div>
@@ -702,9 +711,45 @@ let micFrames = 0;
 let micVoiced = 0;
 let micStartTime = 0;
 let micDuration = 10;
+let micNoiseSamples = [];
+let micNoiseFloorDb = -88;
+let micCalibrationSeconds = 1.2;
+let micSourceMode = "auto";
 
 function setMicProgress(p){
   document.getElementById("micProgressBar").style.width = Math.max(0,Math.min(100,p))+"%";
+}
+
+function isProbablyMobileDevice(){
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "") || Math.min(window.innerWidth || 9999, window.innerHeight || 9999) < 760;
+}
+
+function micProfile(mode){
+  const profiles = {
+    auto:   {label:"automatico / band completa", bassWeight:1.75, lowOctave:1.30, midOctave:1.15, highOctave:0.72, upperOctave:0.42, minHits:2, minFundamental:0.0020, scoreGate:0.0008, chordBoost:1.00},
+    chords: {label:"basso + accordi", bassWeight:2.25, lowOctave:1.55, midOctave:1.25, highOctave:0.58, upperOctave:0.30, minHits:2, minFundamental:0.0018, scoreGate:0.0007, chordBoost:1.20},
+    guitar: {label:"chitarra / piano", bassWeight:1.55, lowOctave:1.20, midOctave:1.20, highOctave:0.82, upperOctave:0.48, minHits:2, minFundamental:0.0016, scoreGate:0.0007, chordBoost:1.05},
+    melody: {label:"voce / melodia singola", bassWeight:0.85, lowOctave:0.85, midOctave:1.05, highOctave:1.00, upperOctave:0.72, minHits:1, minFundamental:0.0012, scoreGate:0.00055, chordBoost:0.55}
+  };
+  return profiles[mode] || profiles.auto;
+}
+
+function currentSpectralPeakDb(analyser){
+  const n = analyser.frequencyBinCount;
+  const bins = new Float32Array(n);
+  analyser.getFloatFrequencyData(bins);
+  let peak = -120;
+  for(let i=1;i<n;i++){
+    if(isFinite(bins[i]) && bins[i] > peak) peak = bins[i];
+  }
+  return peak;
+}
+
+function percentile(values, q){
+  if(!values || !values.length) return -88;
+  const v = values.slice().sort((a,b)=>a-b);
+  const idx = Math.max(0, Math.min(v.length-1, Math.floor((v.length-1)*q)));
+  return v[idx];
 }
 
 function browserMicErrorMessage(err){
@@ -954,22 +999,26 @@ function getBinMagnitude(bins, freq, sampleRate){
 }
 
 
-function addSpectralChromaFromAnalyser(analyser, audioCtx, chroma, bassChroma){
+function addSpectralChromaFromAnalyser(analyser, audioCtx, chroma, bassChroma, options={}){
   const n = analyser.frequencyBinCount;
   const bins = new Float32Array(n);
   analyser.getFloatFrequencyData(bins);
 
+  const profile = options.profile || micProfile("auto");
   let peak = -120;
   for(let i=1;i<n;i++) if(isFinite(bins[i]) && bins[i] > peak) peak = bins[i];
-  const gate = Math.max(-86, peak - 46);
+
+  // Gate dinamico: segue il picco del frame, ma non scende sotto il rumore ambientale calibrato.
+  const noiseFloor = isFinite(options.noiseFloorDb) ? options.noiseFloorDb : -88;
+  const gate = Math.max(noiseFloor + 10, peak - 46, -92);
 
   let added = 0;
   let frameEnergy = 0;
   const frameChroma = new Array(12).fill(0);
   const frameBass = new Array(12).fill(0);
 
-  // Da microfono ragioniamo per fondamentali probabili e non per nota più forte.
-  // Questo riduce l'errore classico: scambiare quinta/armonico per tonica.
+  // Ragioniamo per fondamentali probabili e non per nota più forte.
+  // I pesi cambiano in base alla sorgente: band, basso+accordi, strumento armonico o melodia.
   for(let midi=36; midi<=81; midi++){
     const f0 = 440 * Math.pow(2, (midi-69)/12);
     if(f0 < 55 || f0 > 880) continue;
@@ -989,17 +1038,17 @@ function addSpectralChromaFromAnalyser(analyser, audioCtx, chroma, bassChroma){
       harmonicHits++;
     }
 
-    if(harmonicHits < 2 && fundamental < 0.002) continue;
-    if(score < 0.0008) continue;
+    if(harmonicHits < profile.minHits && fundamental < profile.minFundamental) continue;
+    if(score < profile.scoreGate) continue;
 
     const pc = mod(midi);
-    const octaveWeight = f0 < 120 ? 1.30 : f0 < 260 ? 1.15 : f0 < 520 ? 0.72 : 0.42;
+    const octaveWeight = f0 < 120 ? profile.lowOctave : f0 < 260 ? profile.midOctave : f0 < 520 ? profile.highOctave : profile.upperOctave;
     const w = score * octaveWeight;
 
     frameChroma[pc] += w;
     chroma[pc] += w;
     if(f0 < 260 && bassChroma){
-      const bw = w * 1.75;
+      const bw = w * profile.bassWeight;
       frameBass[pc] += bw;
       bassChroma[pc] += bw;
     }
@@ -1008,7 +1057,7 @@ function addSpectralChromaFromAnalyser(analyser, audioCtx, chroma, bassChroma){
   }
 
   const bassPeak = maxPC(normalizeVector(frameBass));
-  return {added, frameEnergy, frameChroma, bassPc: bassPeak.value > 0.22 ? bassPeak.idx : null};
+  return {added, frameEnergy, frameChroma, bassPc: bassPeak.value > 0.22 ? bassPeak.idx : null, peakDb: peak, gateDb: gate};
 }
 
 async function startMicAnalysis(){
@@ -1017,6 +1066,7 @@ async function startMicAnalysis(){
   result.innerHTML = "";
   setMicProgress(0);
   micDuration = +document.getElementById("micSeconds").value || 10;
+  micSourceMode = (document.getElementById("micSourceMode") || {}).value || "auto";
   micChroma = new Array(12).fill(0);
   micBassChroma = new Array(12).fill(0);
   micChordCounts = {};
@@ -1024,6 +1074,8 @@ async function startMicAnalysis(){
   micFrameHistory = [];
   micFrames = 0;
   micVoiced = 0;
+  micNoiseSamples = [];
+  micNoiseFloorDb = -88;
 
   if(!isLocalOrSecure()){
     status.textContent = "Safari e gli altri browser permettono il microfono solo da HTTPS o da localhost. Pubblica il file su HTTPS oppure aprilo da un server locale.";
@@ -1044,20 +1096,38 @@ async function startMicAnalysis(){
 
     const source = micCtx.createMediaStreamSource(micStream);
     micAnalyser = micCtx.createAnalyser();
-    micAnalyser.fftSize = 8192;
-    micAnalyser.smoothingTimeConstant = 0.72;
+    micAnalyser.fftSize = isProbablyMobileDevice() ? 4096 : 8192;
+    micAnalyser.smoothingTimeConstant = micSourceMode === "melody" ? 0.58 : 0.72;
     source.connect(micAnalyser);
 
     micStartTime = performance.now();
-    status.textContent = "Ascolto in corso... fai sentire un giro armonico. Se arriva solo melodia, proporrò comunque scale sicure per improvvisare.";
+    const sourceProfile = micProfile(micSourceMode);
+    status.textContent = `Calibrazione rumore ambientale in corso... poi fai ascoltare la sorgente (${sourceProfile.label}).`;
 
     function tick(){
       if(!micAnalyser || !micCtx) return;
       if(micCtx.state === "suspended") micCtx.resume().catch(()=>{});
 
-      const frame = addSpectralChromaFromAnalyser(micAnalyser, micCtx, micChroma, micBassChroma);
+      const elapsed = (performance.now() - micStartTime)/1000;
+
+      if(elapsed < micCalibrationSeconds){
+        micNoiseSamples.push(currentSpectralPeakDb(micAnalyser));
+        setMicProgress(100 * elapsed / (micDuration + micCalibrationSeconds));
+        micAnimation = requestAnimationFrame(tick);
+        return;
+      }
+
+      if(micNoiseSamples.length){
+        micNoiseFloorDb = Math.max(-92, Math.min(-45, percentile(micNoiseSamples, 0.75)));
+        micNoiseSamples = [];
+        status.textContent = `Ascolto in corso... sorgente: ${sourceProfile.label}. Rumore stimato: ${Math.round(micNoiseFloorDb)} dB.`;
+      }
+
+      const frame = addSpectralChromaFromAnalyser(micAnalyser, micCtx, micChroma, micBassChroma, {profile:sourceProfile, noiseFloorDb:micNoiseFloorDb});
       micFrames++;
-      if(frame.added > 14 && frame.frameEnergy > 0.003){
+      const voicedAddedThreshold = micSourceMode === "melody" ? 8 : 14;
+      const voicedEnergyThreshold = micSourceMode === "melody" ? 0.0018 : 0.003;
+      if(frame.added > voicedAddedThreshold && frame.frameEnergy > voicedEnergyThreshold){
         micVoiced++;
         micFrameHistory.push(frame.frameChroma);
         if(micFrameHistory.length > 260) micFrameHistory.shift();
@@ -1066,13 +1136,13 @@ async function startMicAnalysis(){
         const chord = estimateFrameChord(frame.frameChroma);
         if(chord){
           const k = `${chord.root}:${chord.quality}`;
-          micChordCounts[k] = (micChordCounts[k] || 0) + Math.min(1.8, chord.score);
+          micChordCounts[k] = (micChordCounts[k] || 0) + Math.min(1.8, chord.score * sourceProfile.chordBoost);
         }
       }
 
-      const elapsed = (performance.now() - micStartTime)/1000;
-      setMicProgress(100 * elapsed / micDuration);
-      if(elapsed >= micDuration){
+      const analysisElapsed = elapsed - micCalibrationSeconds;
+      setMicProgress(100 * analysisElapsed / micDuration);
+      if(analysisElapsed >= micDuration){
         finishMicAnalysis();
       }else{
         micAnimation = requestAnimationFrame(tick);
@@ -1246,9 +1316,10 @@ function finishMicAnalysis(){
   const weakSignal = micVoiced < 8;
   const confidence = improvConfidence(top, micVoiced);
   document.getElementById("useDetectedBtn").disabled = false;
+  const sourceProfile = micProfile(micSourceMode);
   status.textContent = weakSignal
-    ? "Analisi microfono completata con segnale debole: mostro scale sicure per improvvisare."
-    : "Analisi microfono completata: mostro scale utili per improvvisare.";
+    ? `Analisi microfono completata (${sourceProfile.label}) con segnale debole: mostro scale sicure per improvvisare.`
+    : `Analisi microfono completata (${sourceProfile.label}): mostro scale utili per improvvisare.`;
   result.innerHTML = buildImprovResultHTML(top, "microfono", confidence, weakSignal);
 }
 
