@@ -65,6 +65,27 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
       </select>
     </div>
     <div>
+      <label for="showMp3Analysis">Analisi tonalità da MP3</label>
+      <select id="showMp3Analysis">
+        <option value="no">Nascondi</option>
+        <option value="yes">Mostra analisi MP3</option>
+      </select>
+    </div>
+    <div>
+      <label for="showMicAnalysis">Analisi tonalità da microfono</label>
+      <select id="showMicAnalysis">
+        <option value="no">Nascondi</option>
+        <option value="yes">Mostra microfono</option>
+      </select>
+    </div>
+    <div>
+      <label for="showTabAudioAnalysis">Analisi audio da scheda/browser</label>
+      <select id="showTabAudioAnalysis">
+        <option value="no">Nascondi</option>
+        <option value="yes">Mostra audio scheda</option>
+      </select>
+    </div>
+    <div>
       <label for="genreSelect">Genere / stile</label>
       <select id="genreSelect"></select>
     </div>
@@ -78,7 +99,7 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
   <div id="harmonicaInfo"></div>
 </section>
 
-<section class="panel warning">
+<section id="mp3AnalysisPanel" class="panel warning" style="display:none">
   <h2>Analisi tonalità da MP3</h2>
   <div class="controls">
     <div>
@@ -100,7 +121,7 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
   <div id="analysisResult"></div>
 </section>
 
-<section class="panel warning">
+<section id="micAnalysisPanel" class="panel warning" style="display:none">
   <h2>Microfono: scale utili per improvvisare</h2>
   <div class="controls">
     <div>
@@ -139,7 +160,7 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
 </section>
 
 
-<section class="panel warning">
+<section id="tabAudioAnalysisPanel" class="panel warning" style="display:none">
   <h2>Analisi audio da scheda/browser <span class="small">(consigliata su PC)</span></h2>
   <div class="controls">
     <div>
@@ -509,11 +530,26 @@ function render(){
   });
 }
 document.getElementById("renderBtn").onclick=render;
-tonicSel.onchange=render; document.getElementById("keyQuality").onchange=render; document.getElementById("viewMode").onchange=render; document.getElementById("showHarmonica").onchange=render; document.getElementById("showWebKeySearch").onchange=toggleWebKeySearch; genreSelect.onchange=render;
+tonicSel.onchange=render; document.getElementById("keyQuality").onchange=render; document.getElementById("viewMode").onchange=render; document.getElementById("showHarmonica").onchange=render; document.getElementById("showWebKeySearch").onchange=toggleWebKeySearch; document.getElementById("showMp3Analysis").onchange=toggleAudioPanels; document.getElementById("showMicAnalysis").onchange=toggleAudioPanels; document.getElementById("showTabAudioAnalysis").onchange=toggleAudioPanels; genreSelect.onchange=render;
 
 function toggleWebKeySearch(){
   const panel = document.getElementById("webKeyPanel");
   panel.style.display = document.getElementById("showWebKeySearch").value==="yes" ? "block" : "none";
+}
+
+function toggleAudioPanels(){
+  const panels = [
+    ["showMp3Analysis", "mp3AnalysisPanel"],
+    ["showMicAnalysis", "micAnalysisPanel"],
+    ["showTabAudioAnalysis", "tabAudioAnalysisPanel"]
+  ];
+  panels.forEach(([selectId, panelId])=>{
+    const select = document.getElementById(selectId);
+    const panel = document.getElementById(panelId);
+    if(select && panel){
+      panel.style.display = select.value==="yes" ? "block" : "none";
+    }
+  });
 }
 
 function cleanSearchText(s){
@@ -586,6 +622,7 @@ document.getElementById("prepareWebSearchBtn").onclick = prepareWebKeySearch;
 document.getElementById("openWebSearchBtn").onclick = openWebKeySearch;
 
 toggleWebKeySearch();
+toggleAudioPanels();
 render();
 
 // --- Analisi tonalità MP3 ---
