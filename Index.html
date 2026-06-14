@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Scalometro Musicale Pro - analisi armonica e improvvisazione</title>
+<title>Scalometro Musicale Pro - scale utili per improvvisare</title>
 <style>
 :root{--bg:#f6f3ec;--card:#fffaf0;--ink:#201b15;--muted:#6d6257;--accent:#8b4513;--line:#ddd1bf}
 *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
@@ -24,7 +24,7 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
 </head>
 <body>
 <header>
-<h1>Scalometro musicale Pro</h1>
+<h1>Scalometro musicale Pro — improvvisazione</h1>
 <p>Scale, trasposizione per Sib/Mib, armonica, analisi microfono/MP3 e consigli pratici per improvvisare.</p>
 </header>
 
@@ -101,7 +101,7 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
 </section>
 
 <section class="panel warning">
-  <h2>Analisi tonalità da microfono</h2>
+  <h2>Microfono: scale utili per improvvisare</h2>
   <div class="controls">
     <div>
       <label for="micSeconds">Durata ascolto</label>
@@ -110,18 +110,20 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
         <option value="10" selected>10 secondi</option>
         <option value="15">15 secondi</option>
         <option value="20">20 secondi</option>
+        <option value="30">30 secondi</option>
+        <option value="45">45 secondi</option>
       </select>
     </div>
     <div>
       <label>&nbsp;</label>
-      <button id="startMicBtn">Avvia microfono e analizza</button>
+      <button id="startMicBtn">Ascolta e suggerisci scale</button>
     </div>
     <div>
       <label>&nbsp;</label>
       <button id="stopMicBtn" class="secondary" disabled>Ferma microfono</button>
     </div>
   </div>
-  <p class="hint">Consenti il microfono dal browser e fai suonare lo strumento o una cassa esterna vicino al microfono. Se la canzone sta suonando nello stesso PC/browser, usa sotto “Analisi audio da scheda”: evita che il player venga interrotto.</p>
+  <p class="hint">Obiettivo pratico: trovare scale sicure per improvvisare, non una “verità assoluta”. Fai ascoltare un giro armonico con basso/accordi; se sente solo melodia proporrà pentatoniche e alternative verificabili a orecchio.</p>
   <div id="micStatus" class="small"></div>
   <div class="meter"><div id="micProgressBar" class="bar"></div></div>
   <div id="micResult"></div>
@@ -1047,7 +1049,7 @@ async function startMicAnalysis(){
     source.connect(micAnalyser);
 
     micStartTime = performance.now();
-    status.textContent = "Ascolto in corso... fai sentire almeno 2 giri di accordi, meglio con basso; evita sola melodia o assoli.";
+    status.textContent = "Ascolto in corso... fai sentire un giro armonico. Se arriva solo melodia, proporrò comunque scale sicure per improvvisare.";
 
     function tick(){
       if(!micAnalyser || !micCtx) return;
@@ -1096,29 +1098,158 @@ function stopMicTracks(){
   document.getElementById("stopMicBtn").disabled = true;
 }
 
+
+function scaleFitScore(chroma, root, intervals){
+  const inScale = sumPC(chroma, root, intervals);
+  const outScale = Math.max(0, 1 - inScale);
+  const tonic = chroma[root] || 0;
+  const fifth = chroma[mod(root+7)] || 0;
+  return inScale*1.8 - outScale*0.75 + tonic*0.55 + fifth*0.20;
+}
+
+function rankImprovisationScales(chroma, bassChroma, chordCounts, bassHistory){
+  const total = chroma.reduce((a,b)=>a+b,0);
+  const base = total > 0 ? normalizeVector(chroma) : new Array(12).fill(0);
+  const bass = bassChroma ? normalizeVector(bassChroma) : new Array(12).fill(0);
+  const smooth = base.map((v,i)=> v*0.82 + base[mod(i-1)]*0.09 + base[mod(i+1)]*0.09);
+
+  const scaleTypes = [
+    {family:"major", mode:"maggiore", label:"Pentatonica maggiore", ints:[0,2,4,7,9], priority:1.28, use:"molto sicura per pop, country, funk maggiore"},
+    {family:"minor", mode:"minore", label:"Pentatonica minore", ints:[0,3,5,7,10], priority:1.30, use:"molto sicura per rock, blues, funk e brani minori"},
+    {family:"major", mode:"maggiore", label:"Maggiore / Ionico", ints:[0,2,4,5,7,9,11], priority:1.00, use:"quando il brano suona stabile e aperto"},
+    {family:"minor", mode:"minore", label:"Minore naturale", ints:[0,2,3,5,7,8,10], priority:1.00, use:"quando il brano riposa su un centro minore"},
+    {family:"minor", mode:"minore", label:"Dorico", ints:[0,2,3,5,7,9,10], priority:1.05, use:"groove minori, funk, jazz, rock modale"},
+    {family:"major", mode:"maggiore", label:"Misolidio", ints:[0,2,4,5,7,9,10], priority:1.06, use:"dominanti, blues maggiore, rock su accordi 7"},
+    {family:"minor", mode:"minore", label:"Blues minore", ints:[0,3,5,6,7,10], priority:1.18, use:"scelta live robusta anche se la tonalità è incerta"},
+    {family:"major", mode:"maggiore", label:"Blues maggiore", ints:[0,2,3,4,7,9], priority:1.05, use:"blues/country/soul su centro maggiore"}
+  ];
+
+  let out = [];
+  for(let r=0;r<12;r++){
+    const cfMaj = chordFunctionScore(chordCounts || {}, r, "maggiore");
+    const cfMin = chordFunctionScore(chordCounts || {}, r, "minore");
+    const bpMaj = bassPhraseScore(bassHistory || [], r, "maggiore");
+    const bpMin = bassPhraseScore(bassHistory || [], r, "minore");
+
+    scaleTypes.forEach(st=>{
+      const modeScore = st.family==="major" ? cfMaj.score + bpMaj.score : cfMin.score + bpMin.score;
+      const thirdWanted = smooth[mod(r + (st.family==="major" ? 4 : 3))] || 0;
+      const thirdOther = smooth[mod(r + (st.family==="major" ? 3 : 4))] || 0;
+      const bassSupport = (bass[r]||0)*1.0 + (bass[mod(r+7)]||0)*0.34;
+      const fit = scaleFitScore(smooth, r, st.ints);
+      const tonicPresence = smooth[r] || 0;
+      const score = fit*st.priority + modeScore*0.95 + bassSupport + tonicPresence*0.45 + (thirdWanted-thirdOther)*0.25;
+
+      let reason = [];
+      if((bass[r]||0) > 0.10) reason.push("basso/centro presente");
+      if(tonicPresence > 0.08) reason.push("tonica presente nel segnale");
+      if(thirdWanted > thirdOther*1.10) reason.push(st.family==="major" ? "colore maggiore" : "colore minore");
+      if(modeScore > 0.35) reason.push("accordi compatibili");
+      if(st.label.includes("Pentatonica") || st.label.includes("Blues")) reason.push("scala sicura per improvvisare");
+      if(reason.length===0) reason.push(st.use);
+
+      out.push({
+        root:r,
+        mode:st.mode,
+        family:st.family,
+        scaleLabel:st.label,
+        intervals:st.ints,
+        use:st.use,
+        score,
+        reason:Array.from(new Set(reason)).slice(0,4).join(", ")
+      });
+    });
+  }
+
+  out.sort((a,b)=>b.score-a.score);
+
+  // Evita di mostrare cinque variazioni quasi uguali: tieni varietà utile al musicista.
+  const selected = [];
+  const seen = new Set();
+  for(const c of out){
+    const key = `${c.root}:${c.family}:${c.scaleLabel.includes("Pentatonica")?"penta":c.scaleLabel.includes("Blues")?"blues":c.scaleLabel}`;
+    if(seen.has(key)) continue;
+    selected.push(c);
+    seen.add(key);
+    if(selected.length >= 6) break;
+  }
+
+  if(selected.length){
+    const gap = selected.length>1 ? selected[0].score - selected[1].score : 1;
+    selected[0].confidenceLabel = gap < 0.35
+      ? "audio live ambiguo: usa prima la pentatonica/blues indicata e verifica a orecchio se la tonica riposa davvero."
+      : "risultato pensato per improvvisare: privilegia scale robuste rispetto alla tonalità teorica assoluta.";
+  }
+  return selected;
+}
+
+function buildImprovResultHTML(top, sourceLabel, confidence, weakSignal){
+  if(!top || !top.length){
+    return `<p class="result">Segnale insufficiente.</p><p class="hint">Avvicina la sorgente al microfono e fai ascoltare accordi o basso per almeno 15 secondi.</p>`;
+  }
+  const main = top[0];
+  const quality = main.family==="minor" ? "minor" : "major";
+  const weak = weakSignal ? `<p class="hint"><b>Segnale debole o melodico:</b> prendi questo come consiglio pratico per improvvisare, non come tonalità certa.</p>` : "";
+  return `
+    <p class="result">Scala consigliata da ${sourceLabel}: ${NAMES[main.root]} ${main.scaleLabel}
+      <span class="small">utilità stimata ${confidence}%</span></p>
+    <p class="hint">${main.confidenceLabel || ""}</p>
+    ${weak}
+    <div class="grid">
+      ${top.slice(0,4).map((c,idx)=>`
+        <div class="scale">
+          <h3>${idx===0?"Prima scelta":"Alternativa"}: ${NAMES[c.root]} ${c.scaleLabel}</h3>
+          <div class="notes">${renderNoteSet(c.root,c.intervals)}</div>
+          <p class="small">${c.reason}. ${c.use}.</p>
+          <button class="secondary" onclick="applyDetected(${c.root}, '${c.mode}')">Imposta ${NAMES[c.root]} ${c.family==="minor"?"minore":"maggiore"}</button>
+        </div>`).join("")}
+    </div>
+    <table style="margin-top:12px">
+      <thead><tr><th>Ipotesi utile</th><th>Scala</th><th>Motivo</th></tr></thead>
+      <tbody>
+        ${top.map(c=>`<tr><td>${NAMES[c.root]} ${c.family==="minor"?"minore":"maggiore"}</td><td>${c.scaleLabel}</td><td class="small">${c.reason}</td></tr>`).join("")}
+      </tbody>
+    </table>
+    ${instrumentAdvice(main.root, quality)}
+    <p class="hint"><b>Uso da palco:</b> parti dalla prima pentatonica/blues. Se le frasi sembrano “non risolvere”, prova subito la relativa o la seconda alternativa.</p>`;
+}
+
+function improvConfidence(top, voiced){
+  if(!top || top.length < 2) return 35;
+  const gap = top[0].score - top[1].score;
+  const material = Math.min(1, voiced / 40);
+  return Math.round(Math.max(25, Math.min(88, 42 + gap*24 + material*20)));
+}
+
+
 function finishMicAnalysis(){
   const status = document.getElementById("micStatus");
   const result = document.getElementById("micResult");
   stopMicTracks();
   setMicProgress(100);
 
-  if(micVoiced < 14){
-    status.textContent = "Non abbastanza materiale armonico: il microfono ha sentito poco segnale utile. Fai ascoltare accordi/basso per 15-20 secondi, non una singola nota.";
+  const total = micChroma.reduce((a,b)=>a+b,0);
+  if(total <= 0){
+    status.textContent = "Il microfono non ha ricevuto segnale utile. Avvicina la sorgente o alza leggermente il volume.";
+    result.innerHTML = `<p class="hint">Per improvvisare serve almeno qualche accordo, basso o melodia chiara. Il microfono del computer può perdere le basse frequenze: meglio una cassa vicina ma non distorta.</p>`;
     return;
   }
 
-  const top = rankChroma(micChroma, micBassChroma, micChordCounts, micBassHistory);
-  if(!top){
-    status.textContent = "Non riesco a stimare la tonalità dal microfono.";
+  const top = rankImprovisationScales(micChroma, micBassChroma, micChordCounts, micBassHistory);
+  if(!top || !top.length){
+    status.textContent = "Ho ricevuto segnale, ma non abbastanza per proporre scale.";
     return;
   }
 
   detectedRoot = top[0].root;
   detectedMode = top[0].mode;
-  const confidence = keyConfidence(top, micVoiced);
+  const weakSignal = micVoiced < 8;
+  const confidence = improvConfidence(top, micVoiced);
   document.getElementById("useDetectedBtn").disabled = false;
-  status.textContent = "Analisi microfono completata.";
-  result.innerHTML = buildKeyResultHTML(top, "microfono", confidence);
+  status.textContent = weakSignal
+    ? "Analisi microfono completata con segnale debole: mostro scale sicure per improvvisare."
+    : "Analisi microfono completata: mostro scale utili per improvvisare.";
+  result.innerHTML = buildImprovResultHTML(top, "microfono", confidence, weakSignal);
 }
 
 function setTabAudioProgress(v){
@@ -1217,23 +1348,24 @@ function finishTabAudioAnalysis(){
   stopTabAudioTracks();
   setTabAudioProgress(100);
 
-  if(tabAudioVoiced < 10){
-    status.textContent = "Non riesco a stimare bene la tonalità: audio troppo basso, percussivo o senza armonia chiara.";
+  const total = tabAudioChroma.reduce((a,b)=>a+b,0);
+  if(total <= 0){
+    status.textContent = "Non è arrivato audio utile dalla scheda/browser.";
     return;
   }
 
-  const top = rankChroma(tabAudioChroma, tabAudioBassChroma);
-  if(!top){
-    status.textContent = "Non riesco a stimare la tonalità dall’audio della scheda.";
+  const top = rankImprovisationScales(tabAudioChroma, tabAudioBassChroma, {}, []);
+  if(!top || !top.length){
+    status.textContent = "Audio ricevuto, ma non abbastanza chiaro per suggerire scale.";
     return;
   }
 
   detectedRoot = top[0].root;
   detectedMode = top[0].mode;
-  const confidence = keyConfidence(top, tabAudioVoiced);
+  const confidence = improvConfidence(top, tabAudioVoiced);
   document.getElementById("useDetectedBtn").disabled = false;
-  status.textContent = "Analisi audio scheda completata.";
-  result.innerHTML = buildKeyResultHTML(top, "scheda/browser", confidence);
+  status.textContent = "Analisi audio scheda completata: mostro scale utili per improvvisare.";
+  result.innerHTML = buildImprovResultHTML(top, "scheda/browser", confidence, tabAudioVoiced < 8);
 }
 
 document.getElementById("startMicBtn").onclick = startMicAnalysis;
