@@ -1672,6 +1672,192 @@ document.getElementById("stopTabAudioBtn").onclick = ()=>{
   setTabAudioProgress(0);
 };
 
+
+/* --- PATCH: Microfono robusto - dà sempre una risposta musicale se sente segnale --- */
+let micRawFramesRobust = 0;
+let micSignalFramesRobust = 0;
+let micMelodyChromaRobust = new Array(12).fill(0);
+let micLastRmsRobust = 0;
+
+function rmsFromAnalyserRobust(analyser){
+  const buf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  let s = 0;
+  for(let i=0;i<buf.length;i++) s += buf[i]*buf[i];
+  const rms = Math.sqrt(s / buf.length);
+  micLastRmsRobust = rms;
+  return {buf, rms};
+}
+
+function addMelodicFallbackFromAnalyserRobust(analyser, ctx, chroma){
+  const data = rmsFromAnalyserRobust(analyser);
+  if(data.rms < 0.004) return false;
+  const f = estimatePitch(data.buf, ctx.sampleRate);
+  if(!f) return false;
+  const pc = mod(Math.round(freqToMidi(f)));
+  chroma[pc] += 0.75;
+  micMelodyChromaRobust[pc] += 1;
+  return true;
+}
+
+function mergeFallbackIfNeededRobust(){
+  const harmonicTotal = micChroma.reduce((a,b)=>a+b,0);
+  const melodyTotal = micMelodyChromaRobust.reduce((a,b)=>a+b,0);
+  if(harmonicTotal < 0.08 && melodyTotal > 0){
+    for(let i=0;i<12;i++) micChroma[i] += micMelodyChromaRobust[i] * 0.25;
+  }else if(melodyTotal > 0){
+    for(let i=0;i<12;i++) micChroma[i] += micMelodyChromaRobust[i] * 0.035;
+  }
+}
+
+function diagnosticMicTextRobust(){
+  const total = micChroma.reduce((a,b)=>a+b,0);
+  const bassTotal = micBassChroma.reduce((a,b)=>a+b,0);
+  const prog = (micChordHistoryPlus || []).length;
+  return `Frame utili: ${micSignalFramesRobust}/${micRawFramesRobust}. Materiale armonico: ${total.toFixed(2)}. Basso: ${bassTotal.toFixed(2)}. Accordi stabili: ${prog}. RMS finale: ${micLastRmsRobust.toFixed(4)}.`;
+}
+
+function buildLowSignalResultRobust(top){
+  const diag = diagnosticMicTextRobust();
+  return `<p class="hint"><b>Segnale debole o poco armonico:</b> ti mostro comunque le ipotesi migliori. Per migliorare: avvicina la sorgente al microfono, alza leggermente il volume, usa 20-30 secondi e fai sentire basso/accordi.</p>
+  <p class="hint">${diag}</p>` + buildKeyResultHTML(top, "microfono", Math.max(18, keyConfidence(top, Math.max(4, micSignalFramesRobust))));
+}
+
+async function startMicAnalysis(){
+  const status = document.getElementById("micStatus");
+  const result = document.getElementById("micResult");
+  result.innerHTML = "";
+  setMicProgress(0);
+
+  micDuration = +document.getElementById("micSeconds").value || 10;
+  micChroma = new Array(12).fill(0);
+  micBassChroma = new Array(12).fill(0);
+  micChordCounts = {};
+  micBassHistory = [];
+  micFrameHistory = [];
+  micFrames = 0;
+  micVoiced = 0;
+  micRawFramesRobust = 0;
+  micSignalFramesRobust = 0;
+  micMelodyChromaRobust = new Array(12).fill(0);
+
+  if(!isLocalOrSecure()){
+    status.textContent = "Safari e gli altri browser permettono il microfono solo da HTTPS o da localhost.";
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    status.textContent = "Microfono non supportato da questo browser.";
+    return;
+  }
+
+  status.textContent = "Richiedo accesso al microfono...";
+  document.getElementById("startMicBtn").disabled = true;
+  document.getElementById("stopMicBtn").disabled = false;
+
+  try{
+    micStream = await openMicrophoneStream();
+    micCtx = await createRunningAudioContext();
+
+    const source = micCtx.createMediaStreamSource(micStream);
+    micAnalyser = micCtx.createAnalyser();
+    micAnalyser.fftSize = 8192;
+    micAnalyser.smoothingTimeConstant = 0.58;
+    source.connect(micAnalyser);
+
+    // Calibrazione breve ma non bloccante: se l'ambiente è rumoroso non deve impedire il risultato.
+    const modeEl = document.getElementById("micMode");
+    if(modeEl && modeEl.value === "guided"){
+      await calibrateMicNoise(micAnalyser, micCtx, 1.2);
+      micNoiseGateDb = Math.min(micNoiseGateDb, -58);
+    }else{
+      micNoiseGateDb = -76;
+    }
+
+    micStartTime = performance.now();
+    status.textContent = "Ascolto: anche se il segnale è imperfetto darò comunque le ipotesi migliori.";
+
+    function tick(){
+      if(!micAnalyser || !micCtx) return;
+      if(micCtx.state === "suspended") micCtx.resume().catch(()=>{});
+
+      micRawFramesRobust++;
+      const frame = addSpectralChromaFromAnalyserPlus(micAnalyser, micCtx, micChroma, micBassChroma);
+      const melodicOk = addMelodicFallbackFromAnalyserRobust(micAnalyser, micCtx, micChroma);
+
+      micFrames++;
+      // Soglia morbida: microfono reale = meglio raccogliere materiale sporco che non raccogliere nulla.
+      if(frame.added > 2 || frame.frameEnergy > 0.00025 || melodicOk){
+        micSignalFramesRobust++;
+        micVoiced++;
+        if(frame.frameChroma) micFrameHistory.push(frame.frameChroma);
+        if(micFrameHistory.length > 420) micFrameHistory.shift();
+
+        micBassHistory.push(frame.bassPc);
+        if(micBassHistory.length > 420) micBassHistory.shift();
+
+        const chord = frame.chord || estimateFrameChord(frame.frameChroma || new Array(12).fill(0));
+        if(chord && chord.score > 0.11){
+          const k = `${chord.root}:${chord.quality}`;
+          micChordCounts[k] = (micChordCounts[k] || 0) + Math.min(1.7, chord.score);
+          pushStableChord(chord);
+        }
+      }
+
+      const elapsed = (performance.now() - micStartTime)/1000;
+      setMicProgress(100 * elapsed / micDuration);
+      if(elapsed >= micDuration){
+        finishMicAnalysis();
+      }else{
+        micAnimation = requestAnimationFrame(tick);
+      }
+    }
+    tick();
+  }catch(err){
+    status.textContent = "Microfono non disponibile: " + browserMicErrorMessage(err);
+    setMicProgress(0);
+    stopMicTracks();
+  }
+}
+
+function finishMicAnalysis(){
+  const status = document.getElementById("micStatus");
+  const result = document.getElementById("micResult");
+  flushStableChord();
+  stopMicTracks();
+  setMicProgress(100);
+
+  mergeFallbackIfNeededRobust();
+
+  const total = micChroma.reduce((a,b)=>a+b,0);
+  if(total <= 0 || micSignalFramesRobust < 2){
+    status.textContent = "Il browser riceve il microfono, ma il segnale musicale è quasi nullo. Controlla input, permessi, volume e distanza dalla sorgente.";
+    result.innerHTML = `<p class="hint">${diagnosticMicTextRobust()}</p>`;
+    return;
+  }
+
+  const top = rankChroma(micChroma, micBassChroma, micChordCounts, micBassHistory);
+  if(!top){
+    status.textContent = "Segnale ricevuto, ma non classificabile.";
+    result.innerHTML = `<p class="hint">${diagnosticMicTextRobust()}</p>`;
+    return;
+  }
+
+  detectedRoot = top[0].root;
+  detectedMode = top[0].mode;
+  document.getElementById("useDetectedBtn").disabled = false;
+
+  if(micSignalFramesRobust < 8 || total < 0.55){
+    status.textContent = "Analisi microfono completata con segnale debole: risultato indicativo.";
+    result.innerHTML = buildLowSignalResultRobust(top);
+  }else{
+    const confidence = keyConfidence(top, micSignalFramesRobust);
+    status.textContent = "Analisi microfono completata.";
+    result.innerHTML = buildKeyResultHTML(top, "microfono", confidence) + `<p class="hint">${diagnosticMicTextRobust()}</p>`;
+  }
+}
+
+document.getElementById("startMicBtn").onclick = startMicAnalysis;
+
 </script>
 </body>
 </html>
