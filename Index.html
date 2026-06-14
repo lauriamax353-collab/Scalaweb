@@ -1,9 +1,8 @@
-<!DOCTYPE html>
-
+<!doctype html>
 <html lang="it">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scalometro Musicale Pro - scale utili per improvvisare</title>
 <style>
 :root{--bg:#f6f3ec;--card:#fffaf0;--ink:#201b15;--muted:#6d6257;--accent:#8b4513;--line:#ddd1bf}
@@ -27,193 +26,206 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
 <header>
 <h1>Scalometro musicale Pro — improvvisazione</h1>
 <p>Scale, trasposizione per Sib/Mib, armonica, analisi microfono/MP3 e consigli pratici per improvvisare.</p>
-<a href="#scala-suggerita" style="display:inline-block;margin-top:10px;padding:10px 14px;background:#8b4513;color:white;text-decoration:none;border-radius:10px;font-weight:bold;">🎵 Vai a Scala suggerita per improvvisare</a></header>
+</header>
+
 <main>
 <section class="panel">
-<div class="controls">
-<div>
-<label for="tonic">Tonica da concerto</label>
-<select id="tonic"></select>
-</div>
-<div>
-<label for="keyQuality">Modo tonalità concerto</label>
-<select id="keyQuality">
-<option value="major">Maggiore</option>
-<option value="minor">Minore</option>
-</select>
-</div>
-<div>
-<label for="viewMode">Visualizza scale per</label>
-<select id="viewMode">
-<option value="concert">Strumento in DO / concerto</option>
-<option value="Bb">Strumento in Sib</option>
-<option value="Eb">Strumento in Mib</option>
-</select>
-</div>
-<div>
-<label for="showHarmonica">Armonica diatonica</label>
-<select id="showHarmonica">
-<option value="no">Nascondi</option>
-<option value="yes">Mostra riferimenti</option>
-</select>
-</div>
-<div>
-<label for="showWebKeySearch">Testo canzone / ricerca web</label>
-<select id="showWebKeySearch">
-<option value="no">Nascondi</option>
-<option value="yes">Mostra ricerca</option>
-</select>
-</div>
-<div>
-<label for="genreSelect">Genere / stile</label>
-<select id="genreSelect"></select>
-</div>
-<div>
-<label> </label>
-<button id="renderBtn">Calcola scale</button>
-</div>
-</div>
-<p class="hint">Esempio richiesto: Sol concerto visualizzato per strumento in Mib diventa Mi. Ora puoi scegliere anche tonalità concerto maggiore o minore.</p>
-<div id="transposeInfo"></div>
-<div id="harmonicaInfo"></div>
+  <div class="controls">
+    <div>
+      <label for="tonic">Tonica da concerto</label>
+      <select id="tonic"></select>
+    </div>
+    <div>
+      <label for="keyQuality">Modo tonalità concerto</label>
+      <select id="keyQuality">
+        <option value="major">Maggiore</option>
+        <option value="minor">Minore</option>
+      </select>
+    </div>
+    <div>
+      <label for="viewMode">Visualizza scale per</label>
+      <select id="viewMode">
+        <option value="concert">Strumento in DO / concerto</option>
+        <option value="Bb">Strumento in Sib</option>
+        <option value="Eb">Strumento in Mib</option>
+      </select>
+    </div>
+    <div>
+      <label for="showHarmonica">Armonica diatonica</label>
+      <select id="showHarmonica">
+        <option value="no">Nascondi</option>
+        <option value="yes">Mostra riferimenti</option>
+      </select>
+    </div>
+    <div>
+      <label for="showWebKeySearch">Testo canzone / ricerca web</label>
+      <select id="showWebKeySearch">
+        <option value="no">Nascondi</option>
+        <option value="yes">Mostra ricerca</option>
+      </select>
+    </div>
+    <div>
+      <label for="genreSelect">Genere / stile</label>
+      <select id="genreSelect"></select>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="renderBtn">Calcola scale</button>
+    </div>
+  </div>
+  <p class="hint">Esempio richiesto: Sol concerto visualizzato per strumento in Mib diventa Mi. Ora puoi scegliere anche tonalità concerto maggiore o minore.</p>
+  <div id="transposeInfo"></div>
+  <div id="harmonicaInfo"></div>
 </section>
+
 <section class="panel warning">
-<h2>Analisi tonalità da MP3</h2>
-<div class="controls">
-<div>
-<label for="audioFile">Allega MP3</label>
-<input accept="audio/*,.mp3" id="audioFile" type="file"/>
-</div>
-<div>
-<label> </label>
-<button id="analyzeBtn">Analizza tonalità</button>
-</div>
-<div>
-<label> </label>
-<button class="secondary" disabled="" id="useDetectedBtn">Usa tonalità stimata</button>
-</div>
-</div>
-<p class="hint">L’analisi è una stima locale nel browser: funziona meglio su brani con armonia chiara. Modulazioni, intro ritmiche o registrazioni sporche possono confonderla.</p>
-<div class="small" id="analysisStatus"></div>
-<div class="meter"><div class="bar" id="progressBar"></div></div>
-<div id="analysisResult"></div>
+  <h2>Analisi tonalità da MP3</h2>
+  <div class="controls">
+    <div>
+      <label for="audioFile">Allega MP3</label>
+      <input id="audioFile" type="file" accept="audio/*,.mp3">
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="analyzeBtn">Analizza tonalità</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="useDetectedBtn" class="secondary" disabled>Usa tonalità stimata</button>
+    </div>
+  </div>
+  <p class="hint">L’analisi è una stima locale nel browser: funziona meglio su brani con armonia chiara. Modulazioni, intro ritmiche o registrazioni sporche possono confonderla.</p>
+  <div id="analysisStatus" class="small"></div>
+  <div class="meter"><div id="progressBar" class="bar"></div></div>
+  <div id="analysisResult"></div>
 </section>
+
 <section class="panel warning">
-<h2>Microfono: scale utili per improvvisare</h2>
-<div class="controls">
-<div>
-<label for="micSeconds">Durata ascolto</label>
-<select id="micSeconds">
-<option value="6">6 secondi</option>
-<option selected="" value="10">10 secondi</option>
-<option value="15">15 secondi</option>
-<option value="20">20 secondi</option>
-<option value="30">30 secondi</option>
-<option value="45">45 secondi</option>
-</select>
-</div>
-<div>
-<label for="micSourceMode">Tipo sorgente</label>
-<select id="micSourceMode">
-<option selected="" value="auto">Automatico / band completa</option>
-<option value="chords">Basso + accordi</option>
-<option value="guitar">Chitarra / piano</option>
-<option value="melody">Voce / melodia singola</option>
-</select>
-</div>
-<div>
-<label> </label>
-<button id="startMicBtn">Ascolta e suggerisci scale</button>
-</div>
-<div>
-<label> </label>
-<button class="secondary" disabled="" id="stopMicBtn">Ferma microfono</button>
-</div>
-</div>
-<p class="hint">Obiettivo pratico: trovare scale sicure per improvvisare, non una “verità assoluta”. I primi istanti calibrano il rumore ambientale; poi fai ascoltare un giro armonico con basso/accordi. Se sente solo melodia proporrà pentatoniche e alternative verificabili a orecchio.</p>
-<div class="small" id="micStatus"></div>
-<div class="meter"><div class="bar" id="micProgressBar"></div></div>
-<div id="micResult"></div>
+  <h2>Microfono: scale utili per improvvisare</h2>
+  <div class="controls">
+    <div>
+      <label for="micSeconds">Durata ascolto</label>
+      <select id="micSeconds">
+        <option value="6">6 secondi</option>
+        <option value="10" selected>10 secondi</option>
+        <option value="15">15 secondi</option>
+        <option value="20">20 secondi</option>
+        <option value="30">30 secondi</option>
+        <option value="45">45 secondi</option>
+      </select>
+    </div>
+    <div>
+      <label for="micSourceMode">Tipo sorgente</label>
+      <select id="micSourceMode">
+        <option value="auto" selected>Automatico / band completa</option>
+        <option value="chords">Basso + accordi</option>
+        <option value="guitar">Chitarra / piano</option>
+        <option value="melody">Voce / melodia singola</option>
+      </select>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="startMicBtn">Ascolta e suggerisci scale</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="stopMicBtn" class="secondary" disabled>Ferma microfono</button>
+    </div>
+  </div>
+  <p class="hint">Obiettivo pratico: trovare scale sicure per improvvisare, non una “verità assoluta”. I primi istanti calibrano il rumore ambientale; poi fai ascoltare un giro armonico con basso/accordi. Se sente solo melodia proporrà pentatoniche e alternative verificabili a orecchio.</p>
+  <div id="micStatus" class="small"></div>
+  <div class="meter"><div id="micProgressBar" class="bar"></div></div>
+  <div id="micResult"></div>
 </section>
+
+
 <section class="panel warning">
-<h2>Analisi audio da scheda/browser <span class="small">(consigliata su PC)</span></h2>
-<div class="controls">
-<div>
-<label for="tabSeconds">Durata ascolto</label>
-<select id="tabSeconds">
-<option value="6">6 secondi</option>
-<option selected="" value="10">10 secondi</option>
-<option value="15">15 secondi</option>
-<option value="20">20 secondi</option>
-</select>
-</div>
-<div>
-<label> </label>
-<button id="startTabAudioBtn">Analizza audio della scheda</button>
-</div>
-<div>
-<label> </label>
-<button class="secondary" disabled="" id="stopTabAudioBtn">Ferma analisi scheda</button>
-</div>
-</div>
-<p class="hint">Per analizzare una canzone che suona in una pagina web, usa questa funzione invece del microfono. Su Chrome da PC scegli la scheda dove sta suonando la musica e attiva “Condividi audio della scheda”. Il microfono resta utile per strumenti reali o musica da una cassa esterna.</p>
-<div class="small" id="tabAudioStatus"></div>
-<div class="meter"><div class="bar" id="tabAudioProgressBar"></div></div>
-<div id="tabAudioResult"></div>
+  <h2>Analisi audio da scheda/browser <span class="small">(consigliata su PC)</span></h2>
+  <div class="controls">
+    <div>
+      <label for="tabSeconds">Durata ascolto</label>
+      <select id="tabSeconds">
+        <option value="6">6 secondi</option>
+        <option value="10" selected>10 secondi</option>
+        <option value="15">15 secondi</option>
+        <option value="20">20 secondi</option>
+      </select>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="startTabAudioBtn">Analizza audio della scheda</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="stopTabAudioBtn" class="secondary" disabled>Ferma analisi scheda</button>
+    </div>
+  </div>
+  <p class="hint">Per analizzare una canzone che suona in una pagina web, usa questa funzione invece del microfono. Su Chrome da PC scegli la scheda dove sta suonando la musica e attiva “Condividi audio della scheda”. Il microfono resta utile per strumenti reali o musica da una cassa esterna.</p>
+  <div id="tabAudioStatus" class="small"></div>
+  <div class="meter"><div id="tabAudioProgressBar" class="bar"></div></div>
+  <div id="tabAudioResult"></div>
 </section>
-<section class="panel warning" id="webKeyPanel" style="display:none">
-<h2>Cerca tonalità da testo canzone sul web</h2>
-<div class="controls">
-<div>
-<label for="songTitle">Titolo canzone</label>
-<input id="songTitle" placeholder="Es. Stand By Me" type="text"/>
-</div>
-<div>
-<label for="songArtist">Artista</label>
-<input id="songArtist" placeholder="Es. Ben E. King" type="text"/>
-</div>
-</div>
-<div style="margin-top:12px">
-<label for="songLyrics">Testo / appunti della canzone</label>
-<textarea id="songLyrics" placeholder="Incolla qui il testo: serve soprattutto come promemoria. Se titolo/artista sono vuoti, provo a usare le prime parole per preparare la ricerca."></textarea>
-</div>
-<div class="controls" style="margin-top:12px">
-<div>
-<label> </label>
-<button id="prepareWebSearchBtn">Prepara ricerca tonalità</button>
-</div>
-<div>
-<label> </label>
-<button class="secondary" id="openWebSearchBtn">Apri ricerca web</button>
-</div>
-</div>
-<p class="hint">Per motivi di sicurezza del browser, questo file HTML non può leggere automaticamente Google o siti di accordi senza un servizio esterno/API. La funzione prepara ricerche mirate; quando trovi la tonalità, clicca la nota corrispondente sotto.</p>
-<div id="webSearchResult"></div>
+
+<section id="webKeyPanel" class="panel warning" style="display:none">
+  <h2>Cerca tonalità da testo canzone sul web</h2>
+  <div class="controls">
+    <div>
+      <label for="songTitle">Titolo canzone</label>
+      <input id="songTitle" type="text" placeholder="Es. Stand By Me">
+    </div>
+    <div>
+      <label for="songArtist">Artista</label>
+      <input id="songArtist" type="text" placeholder="Es. Ben E. King">
+    </div>
+  </div>
+  <div style="margin-top:12px">
+    <label for="songLyrics">Testo / appunti della canzone</label>
+    <textarea id="songLyrics" placeholder="Incolla qui il testo: serve soprattutto come promemoria. Se titolo/artista sono vuoti, provo a usare le prime parole per preparare la ricerca."></textarea>
+  </div>
+  <div class="controls" style="margin-top:12px">
+    <div>
+      <label>&nbsp;</label>
+      <button id="prepareWebSearchBtn">Prepara ricerca tonalità</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="openWebSearchBtn" class="secondary">Apri ricerca web</button>
+    </div>
+  </div>
+  <p class="hint">Per motivi di sicurezza del browser, questo file HTML non può leggere automaticamente Google o siti di accordi senza un servizio esterno/API. La funzione prepara ricerche mirate; quando trovi la tonalità, clicca la nota corrispondente sotto.</p>
+  <div id="webSearchResult"></div>
 </section>
-<section class="panel" id="scala-suggerita">
-<h2>Scala suggerita per improvvisare</h2>
-<div id="genreSuggestion"></div>
-</section>
+
+
+
+
 <section class="panel">
-<h2>Modalità musicista</h2>
-<p class="hint">Trasforma la tonalità corrente in indicazioni pratiche per palco, prova e improvvisazione.</p>
-<div class="controls">
-<div>
-<label> </label>
-<button id="performanceBtn">🎷 Sto improvvisando: cosa uso?</button>
-</div>
-<div>
-<label> </label>
-<button class="secondary" id="ambiguityBtn">Mostra alternative musicali</button>
-</div>
-</div>
-<div id="performanceAdvice"></div>
+  <h2>Scala suggerita per improvvisare</h2>
+  <div id="genreSuggestion"></div>
 </section>
+
 <section class="panel">
-<h2>Scale di riferimento</h2>
-<div class="grid" id="scales"></div>
+  <h2>Modalità musicista</h2>
+  <p class="hint">Trasforma la tonalità corrente in indicazioni pratiche per palco, prova e improvvisazione.</p>
+  <div class="controls">
+    <div>
+      <label>&nbsp;</label>
+      <button id="performanceBtn">🎷 Sto improvvisando: cosa uso?</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button id="ambiguityBtn" class="secondary">Mostra alternative musicali</button>
+    </div>
+  </div>
+  <div id="performanceAdvice"></div>
+</section>
+
+<section class="panel">
+  <h2>Scale di riferimento</h2>
+  <div id="scales" class="grid"></div>
 </section>
 </main>
+
 <script>
 const NAMES = ["Do","Do♯/Re♭","Re","Re♯/Mi♭","Mi","Fa","Fa♯/Sol♭","Sol","Sol♯/La♭","La","La♯/Si♭","Si"];
 const SIMPLE = ["Do","Do♯","Re","Re♯","Mi","Fa","Fa♯","Sol","Sol♯","La","La♯","Si"];
