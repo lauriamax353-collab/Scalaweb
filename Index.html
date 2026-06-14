@@ -58,31 +58,31 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
       </select>
     </div>
     <div>
-      <label for="showWebKeySearch">Testo canzone / ricerca web</label>
-      <select id="showWebKeySearch">
-        <option value="no">Nascondi</option>
-        <option value="yes">Mostra ricerca</option>
-      </select>
-    </div>
-    <div>
       <label for="showMp3Analysis">Analisi tonalità da MP3</label>
       <select id="showMp3Analysis">
         <option value="no">Nascondi</option>
-        <option value="yes">Mostra analisi MP3</option>
+        <option value="yes">Mostra analisi</option>
       </select>
     </div>
     <div>
       <label for="showMicAnalysis">Analisi tonalità da microfono</label>
       <select id="showMicAnalysis">
         <option value="no">Nascondi</option>
-        <option value="yes">Mostra microfono</option>
+        <option value="yes">Mostra analisi</option>
       </select>
     </div>
     <div>
       <label for="showTabAudioAnalysis">Analisi audio da scheda/browser</label>
       <select id="showTabAudioAnalysis">
         <option value="no">Nascondi</option>
-        <option value="yes">Mostra audio scheda</option>
+        <option value="yes">Mostra analisi</option>
+      </select>
+    </div>
+    <div>
+      <label for="showWebKeySearch">Testo canzone / ricerca web</label>
+      <select id="showWebKeySearch">
+        <option value="no">Nascondi</option>
+        <option value="yes">Mostra ricerca</option>
       </select>
     </div>
     <div>
@@ -530,7 +530,7 @@ function render(){
   });
 }
 document.getElementById("renderBtn").onclick=render;
-tonicSel.onchange=render; document.getElementById("keyQuality").onchange=render; document.getElementById("viewMode").onchange=render; document.getElementById("showHarmonica").onchange=render; document.getElementById("showWebKeySearch").onchange=toggleWebKeySearch; document.getElementById("showMp3Analysis").onchange=toggleAudioPanels; document.getElementById("showMicAnalysis").onchange=toggleAudioPanels; document.getElementById("showTabAudioAnalysis").onchange=toggleAudioPanels; genreSelect.onchange=render;
+tonicSel.onchange=render; document.getElementById("keyQuality").onchange=render; document.getElementById("viewMode").onchange=render; document.getElementById("showHarmonica").onchange=render; document.getElementById("showMp3Analysis").onchange=toggleAudioPanels; document.getElementById("showMicAnalysis").onchange=toggleAudioPanels; document.getElementById("showTabAudioAnalysis").onchange=toggleAudioPanels; document.getElementById("showWebKeySearch").onchange=toggleWebKeySearch; genreSelect.onchange=render;
 
 function toggleWebKeySearch(){
   const panel = document.getElementById("webKeyPanel");
@@ -538,18 +538,12 @@ function toggleWebKeySearch(){
 }
 
 function toggleAudioPanels(){
-  const panels = [
-    ["showMp3Analysis", "mp3AnalysisPanel"],
-    ["showMicAnalysis", "micAnalysisPanel"],
-    ["showTabAudioAnalysis", "tabAudioAnalysisPanel"]
-  ];
-  panels.forEach(([selectId, panelId])=>{
-    const select = document.getElementById(selectId);
-    const panel = document.getElementById(panelId);
-    if(select && panel){
-      panel.style.display = select.value==="yes" ? "block" : "none";
-    }
-  });
+  const mp3Panel = document.getElementById("mp3AnalysisPanel");
+  const micPanel = document.getElementById("micAnalysisPanel");
+  const tabPanel = document.getElementById("tabAudioAnalysisPanel");
+  mp3Panel.style.display = document.getElementById("showMp3Analysis").value==="yes" ? "block" : "none";
+  micPanel.style.display = document.getElementById("showMicAnalysis").value==="yes" ? "block" : "none";
+  tabPanel.style.display = document.getElementById("showTabAudioAnalysis").value==="yes" ? "block" : "none";
 }
 
 function cleanSearchText(s){
