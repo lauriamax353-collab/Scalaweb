@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Scalometro Musicale Pro - analisi armonica e improvvisazione</title>
+<title>Scalometro Musicale Pro Plus - microfono armonico guidato</title>
 <style>
 :root{--bg:#f6f3ec;--card:#fffaf0;--ink:#201b15;--muted:#6d6257;--accent:#8b4513;--line:#ddd1bf}
 *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
@@ -1234,6 +1234,423 @@ function finishTabAudioAnalysis(){
   document.getElementById("useDetectedBtn").disabled = false;
   status.textContent = "Analisi audio scheda completata.";
   result.innerHTML = buildKeyResultHTML(top, "scheda/browser", confidence);
+}
+
+
+// ============================================================
+// VERSIONE MICROFONO PLUS: ascolto guidato + centro tonale reale
+// ============================================================
+let micNoiseGateDb = -82;
+let micChordHistoryPlus = [];
+let micLastChordPlus = null;
+let micLastChordFramesPlus = 0;
+
+(function enhanceMicUI(){
+  const micSeconds = document.getElementById("micSeconds");
+  if(micSeconds && !document.getElementById("micMode")){
+    if(!Array.from(micSeconds.options).some(o=>o.value==="30")){
+      [["30","30 secondi"],["45","45 secondi"]].forEach(([v,t])=>{
+        const o=document.createElement("option"); o.value=v; o.textContent=t; micSeconds.appendChild(o);
+      });
+    }
+    micSeconds.value = "20";
+    const controls = micSeconds.closest(".controls");
+    if(controls){
+      controls.insertAdjacentHTML("beforeend", `
+        <div>
+          <label for="micMode">Metodo microfono</label>
+          <select id="micMode">
+            <option value="guided" selected>Guidato: calibra + accordi</option>
+            <option value="fast">Rapido</option>
+          </select>
+        </div>
+      `);
+    }
+  }
+  const micHint = document.querySelector("#micResult")?.previousElementSibling?.previousElementSibling;
+  const status = document.getElementById("micStatus");
+  if(status){
+    status.insertAdjacentHTML("afterend", `<p class="hint" id="micMusicianHint"><b>Metodo musicista:</b> il microfono funziona meglio se sente 2-4 giri di accordi con basso. Se sente solo melodia/assolo, mostra apposta più alternative.</p>`);
+  }
+})();
+
+function chordLabel(ch){
+  if(!ch) return "";
+  return `${NAMES[ch.root]} ${ch.quality==="minore" ? "m" : ""}`;
+}
+
+function sameChord(a,b){
+  return a && b && a.root===b.root && a.quality===b.quality;
+}
+
+function pushStableChord(chord){
+  if(!chord || chord.score < 0.23) return;
+  if(sameChord(chord, micLastChordPlus)){
+    micLastChordFramesPlus++;
+  }else{
+    if(micLastChordPlus && micLastChordFramesPlus >= 3){
+      micChordHistoryPlus.push({...micLastChordPlus, frames: micLastChordFramesPlus});
+      if(micChordHistoryPlus.length > 80) micChordHistoryPlus.shift();
+    }
+    micLastChordPlus = chord;
+    micLastChordFramesPlus = 1;
+  }
+}
+
+function flushStableChord(){
+  if(micLastChordPlus && micLastChordFramesPlus >= 3){
+    micChordHistoryPlus.push({...micLastChordPlus, frames: micLastChordFramesPlus});
+  }
+  micLastChordPlus = null;
+  micLastChordFramesPlus = 0;
+  // comprime ripetizioni consecutive
+  const compact = [];
+  micChordHistoryPlus.forEach(ch=>{
+    const last = compact[compact.length-1];
+    if(last && sameChord(last,ch)){
+      last.frames += ch.frames || 1;
+      last.score = Math.max(last.score, ch.score || 0);
+    }else{
+      compact.push({...ch});
+    }
+  });
+  micChordHistoryPlus = compact.slice(-32);
+}
+
+async function calibrateMicNoise(analyser, ctx, seconds){
+  const status = document.getElementById("micStatus");
+  status.textContent = "Calibrazione: resta in silenzio 2 secondi, poi fai partire la musica.";
+  const n = analyser.frequencyBinCount;
+  const bins = new Float32Array(n);
+  const peaks = [];
+  const until = performance.now() + seconds*1000;
+  while(performance.now() < until && micAnalyser){
+    analyser.getFloatFrequencyData(bins);
+    let peak = -120;
+    for(let i=1;i<n;i++){
+      const freq = i * ctx.sampleRate / analyser.fftSize;
+      if(freq < 55 || freq > 5200) continue;
+      if(isFinite(bins[i]) && bins[i] > peak) peak = bins[i];
+    }
+    peaks.push(peak);
+    setMicProgress(Math.min(12, 12*(1-(until-performance.now())/(seconds*1000))));
+    await new Promise(r=>setTimeout(r,80));
+  }
+  peaks.sort((a,b)=>a-b);
+  const p80 = peaks[Math.floor(peaks.length*0.80)] || -90;
+  micNoiseGateDb = Math.max(-88, Math.min(-52, p80 + 12));
+  status.textContent = "Calibrazione completata. Ora ascolto armonia e basso...";
+}
+
+function addSpectralChromaFromAnalyserPlus(analyser, audioCtx, chroma, bassChroma){
+  const n = analyser.frequencyBinCount;
+  const bins = new Float32Array(n);
+  analyser.getFloatFrequencyData(bins);
+
+  let peak = -120, avg = 0, used = 0;
+  for(let i=1;i<n;i++){
+    const freq = i * audioCtx.sampleRate / analyser.fftSize;
+    if(freq < 55 || freq > 5200) continue;
+    if(isFinite(bins[i])){
+      peak = Math.max(peak, bins[i]);
+      avg += bins[i]; used++;
+    }
+  }
+  avg = used ? avg/used : -100;
+  // gate adattivo: non inseguire troppo batteria/ambiente, ma ignora stanza/ronzio
+  const gate = Math.max(micNoiseGateDb, Math.max(avg + 10, peak - 54));
+
+  let added = 0;
+  let frameEnergy = 0;
+  const frameChroma = new Array(12).fill(0);
+  const frameBass = new Array(12).fill(0);
+
+  // cerca fondamentali plausibili, non solo picchi. Microfono = armonici confusi.
+  for(let midi=35; midi<=83; midi++){
+    const f0 = 440 * Math.pow(2, (midi-69)/12);
+    if(f0 < 50 || f0 > 990) continue;
+
+    let score = 0, fundamental = 0, harmonicHits = 0;
+    for(let h=1; h<=10; h++){
+      const f = f0*h;
+      if(f > Math.min(5600, audioCtx.sampleRate/2 - 100)) break;
+      const idx = Math.round(f / (audioCtx.sampleRate/2) * n);
+      if(idx < 1 || idx >= n) continue;
+
+      const db = bins[idx];
+      if(!isFinite(db) || db < gate) continue;
+
+      const mag = getBinMagnitude(bins, f, audioCtx.sampleRate);
+      // h=2 e h=3 aiutano a ricostruire fondamentali deboli; h alti meno importanti
+      const weight = h===1 ? 1.55 : h===2 ? 0.82 : h===3 ? 0.56 : 0.42 / Math.pow(h-2, 0.75);
+      score += mag * weight;
+      if(h===1) fundamental += mag;
+      harmonicHits++;
+    }
+
+    // se manca la fondamentale, accetta solo pattern armonico credibile
+    if(harmonicHits < 3 && fundamental < 0.0015) continue;
+    if(score < 0.0010) continue;
+
+    const pc = mod(midi);
+    const octaveWeight = f0 < 95 ? 1.38 : f0 < 180 ? 1.30 : f0 < 330 ? 1.04 : f0 < 660 ? 0.62 : 0.34;
+    const w = score * octaveWeight;
+    frameChroma[pc] += w;
+    chroma[pc] += w;
+
+    if(f0 >= 45 && f0 < 250 && bassChroma){
+      const bw = w * (f0 < 150 ? 2.05 : 1.45);
+      frameBass[pc] += bw;
+      bassChroma[pc] += bw;
+    }
+    frameEnergy += w;
+    added++;
+  }
+
+  const bassPeak = maxPC(normalizeVector(frameBass));
+  const chord = estimateFrameChord(frameChroma);
+  return {added, frameEnergy, frameChroma, bassPc: bassPeak.value > 0.20 ? bassPeak.idx : null, chord};
+}
+
+function chordTransitionScore(root, mode, progression){
+  if(!progression || progression.length < 2) return {score:0, reason:[]};
+  const is = (ch, interval, q=null)=> ch && ch.root===mod(root+interval) && (!q || ch.quality===q);
+  let score = 0;
+  let reason = [];
+  for(let i=1;i<progression.length;i++){
+    const a = progression[i-1], b = progression[i];
+    if(mode==="maggiore"){
+      if(is(a,7,"maggiore") && is(b,0,"maggiore")){ score += 1.65; reason.push("cadenza V→I"); }
+      if(is(a,5,"maggiore") && is(b,0,"maggiore")){ score += 0.85; reason.push("IV→I/plagale"); }
+      if(is(a,5,"maggiore") && is(b,7,"maggiore")){ score += 0.65; reason.push("IV→V"); }
+      if(is(a,2,"minore") && is(b,7,"maggiore")){ score += 0.70; reason.push("ii→V"); }
+      if(is(a,9,"minore") && is(b,5,"maggiore")) score += 0.35;
+    }else{
+      if(is(a,7,"maggiore") && is(b,0,"minore")){ score += 1.85; reason.push("V→i minore"); }
+      if(is(a,7,"minore") && is(b,0,"minore")){ score += 1.05; reason.push("v→i minore"); }
+      if(is(a,10,"maggiore") && is(b,0,"minore")){ score += 0.95; reason.push("VII→i"); }
+      if(is(a,8,"maggiore") && is(b,10,"maggiore")){ score += 0.55; reason.push("VI→VII"); }
+      if(is(a,5,"minore") && (is(b,7,"maggiore") || is(b,7,"minore"))) score += 0.50;
+    }
+  }
+  // accordo finale/frase finale: molto importante da microfono
+  const last = progression[progression.length-1];
+  if(mode==="maggiore" && is(last,0,"maggiore")){ score += 1.20; reason.push("ultimo accordo su I"); }
+  if(mode==="minore" && is(last,0,"minore")){ score += 1.30; reason.push("ultimo accordo su i"); }
+  return {score, reason: Array.from(new Set(reason)).slice(0,4)};
+}
+
+function rankChroma(chroma, bassChroma, chordCounts, bassHistory){
+  const total = chroma.reduce((a,b)=>a+b,0);
+  if(total <= 0) return null;
+
+  const c0 = normalizeVector(chroma);
+  const b0 = bassChroma ? normalizeVector(bassChroma) : new Array(12).fill(0);
+  const smooth = c0.map((v,i)=> v*0.78 + c0[mod(i-1)]*0.11 + c0[mod(i+1)]*0.11);
+  const progression = micChordHistoryPlus || [];
+  const bassPeak = maxPC(b0);
+
+  let candidates=[];
+  for(let r=0;r<12;r++){
+    ["maggiore","minore"].forEach(mode=>{
+      const profile = mode==="maggiore" ? majorProfile : minorProfile;
+      const profileCorr = corr(profile, smooth, r);
+      const profileScore = keyProfileScore(smooth, r, mode);
+      const cf = chordFunctionScore(chordCounts, r, mode);
+      const tr = chordTransitionScore(r, mode, progression);
+      const bp = bassPhraseScore(bassHistory, r, mode);
+
+      const tonicBass = b0[r] || 0;
+      const dominantBass = b0[mod(r+7)] || 0;
+      const subBass = b0[mod(r+5)] || 0;
+      const relRoot = mode==="maggiore" ? mod(r+9) : mod(r+3);
+      const relativeBass = b0[relRoot] || 0;
+
+      const modeThird = smooth[mod(r + (mode==="maggiore" ? 4 : 3))] || 0;
+      const wrongThird = smooth[mod(r + (mode==="maggiore" ? 3 : 4))] || 0;
+
+      // Score più "da musicista": funzione armonica/progressione > cromagramma grezzo.
+      let score =
+        profileCorr*0.28 +
+        profileScore*0.52 +
+        (tonicBass*2.15 + dominantBass*0.78 + subBass*0.45 - Math.max(0, relativeBass-tonicBass)*1.20) +
+        (modeThird*0.42 - wrongThird*0.34) +
+        cf.score*1.65 +
+        tr.score*1.85 +
+        bp.score*1.20;
+
+      // Se c'è poco accordo I/i ma tanta relativa, non spingere troppo quel candidato.
+      if(relativeBass > tonicBass*1.75 && relativeBass > 0.11) score -= 0.55;
+
+      let why = [];
+      why = why.concat(cf.reason || [], tr.reason || [], bp.reason || []);
+      if(modeThird > wrongThird*1.18) why.push(mode==="maggiore" ? "terza maggiore chiara" : "terza minore chiara");
+      if(tonicBass > 0.12) why.push("basso sulla tonica");
+      if(relativeBass > tonicBass*1.7 && relativeBass > 0.10) why.push("relativa molto possibile");
+
+      candidates.push({root:r, mode, score, reason: Array.from(new Set(why)).slice(0,5).join(", ")});
+    });
+  }
+
+  candidates.sort((a,b)=>b.score-a.score);
+  const top = candidates.slice(0,6);
+  const gap = top[0].score - top[1].score;
+
+  if(gap < 0.75){
+    top[0].confidenceLabel = "risultato volutamente prudente: il microfono sente materiale compatibile con più centri tonali. Prova 20-30 secondi con basso/accordi, non solo melodia.";
+  }else if(bassPeak.value > 0.23){
+    const ok = top[0].root===bassPeak.idx || mod(top[0].root+7)===bassPeak.idx || mod(top[0].root+5)===bassPeak.idx;
+    if(!ok) top[0].confidenceLabel = `il basso più forte sembra ${NAMES[bassPeak.idx]}: controlla relativa, dominante o modalità.`;
+  }
+  return top;
+}
+
+function buildChordSummaryHTML(){
+  const prog = micChordHistoryPlus || [];
+  if(!prog.length) return `<p class="hint">Accordi stimati: non abbastanza stabili. Per migliorare: alza il volume della base e fai sentire gli accordi, non solo una linea melodica.</p>`;
+  const shown = prog.slice(-12).map(ch=>`<span class="badge">${chordLabel(ch)}</span>`).join("");
+  return `<div class="scale"><h3>Accordi/frasi percepite dal microfono</h3><p>${shown}</p><p class="hint">Questa sequenza pesa più del semplice elenco di note: serve a distinguere, per esempio, Do maggiore da La minore.</p></div>`;
+}
+
+function buildKeyResultHTML(top, sourceLabel, confidence){
+  const warning = top[0].confidenceLabel ? `<p class="hint"><b>Nota musicale:</b> ${top[0].confidenceLabel}</p>` : "";
+  const quality = top[0].mode==="minore" ? "minor" : "major";
+  const rel = quality==="minor" ? relMajor(top[0].root) : relMinor(top[0].root);
+  const chordSummary = sourceLabel==="microfono" ? buildChordSummaryHTML() : "";
+  const pct = top.map((c,i)=>{
+    const diff = Math.max(0, top[0].score - c.score);
+    return Math.max(4, Math.round(100 * Math.exp(-diff/2.2)));
+  });
+  return `
+    <p class="result">Tonalità stimata da ${sourceLabel}: ${NAMES[top[0].root]} ${top[0].mode}
+      <span class="small">affidabilità circa ${confidence}%</span></p>
+    ${warning}
+    ${chordSummary}
+    <table><thead><tr><th>Possibilità</th><th>Peso relativo</th><th>Punteggio</th><th>Perché</th><th>Azione</th></tr></thead><tbody>
+      ${top.map((c,i)=>`<tr><td>${NAMES[c.root]} ${c.mode}</td><td>${pct[i]}%</td><td>${c.score.toFixed(3)}</td><td class="small">${c.reason || ""}</td><td><button class="secondary" onclick="applyDetected(${c.root}, \'${c.mode}\')">Usa ${NAMES[c.root]}</button></td></tr>`).join("")}
+    </tbody></table>
+    <p class="hint">Metodo aggiornato: prima calibra il rumore, poi pesa progressione, basso, cadenze, terza maggiore/minore e finale di frase. Controlla la relativa ${NAMES[rel]} ${quality==="minor"?"maggiore":"minore"} quando i primi due risultati sono vicini.</p>
+    ${instrumentAdvice(top[0].root, quality)}`;
+}
+
+async function startMicAnalysis(){
+  const status = document.getElementById("micStatus");
+  const result = document.getElementById("micResult");
+  result.innerHTML = "";
+  setMicProgress(0);
+  micDuration = +document.getElementById("micSeconds").value || 20;
+  const guided = (document.getElementById("micMode")?.value || "guided") === "guided";
+
+  micChroma = new Array(12).fill(0);
+  micBassChroma = new Array(12).fill(0);
+  micChordCounts = {};
+  micBassHistory = [];
+  micFrameHistory = [];
+  micChordHistoryPlus = [];
+  micLastChordPlus = null;
+  micLastChordFramesPlus = 0;
+  micFrames = 0;
+  micVoiced = 0;
+  micNoiseGateDb = -82;
+
+  if(!isLocalOrSecure()){
+    status.textContent = "Safari e gli altri browser permettono il microfono solo da HTTPS o da localhost.";
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    status.textContent = "Microfono non supportato da questo browser.";
+    return;
+  }
+
+  document.getElementById("startMicBtn").disabled = true;
+  document.getElementById("stopMicBtn").disabled = false;
+  status.textContent = "Richiedo accesso al microfono...";
+
+  try{
+    micStream = await openMicrophoneStream();
+    micCtx = await createRunningAudioContext();
+
+    const source = micCtx.createMediaStreamSource(micStream);
+    micAnalyser = micCtx.createAnalyser();
+    micAnalyser.fftSize = 8192;
+    micAnalyser.smoothingTimeConstant = 0.66;
+    source.connect(micAnalyser);
+
+    if(guided){
+      await calibrateMicNoise(micAnalyser, micCtx, 2.0);
+      micChroma = new Array(12).fill(0);
+      micBassChroma = new Array(12).fill(0);
+      micChordCounts = {};
+      micBassHistory = [];
+      micFrameHistory = [];
+      micChordHistoryPlus = [];
+      micFrames = 0; micVoiced = 0;
+    }
+
+    micStartTime = performance.now();
+    status.textContent = "Ascolto musicale in corso: fai sentire giro armonico + basso. Se puoi, includi il ritornello o la risoluzione finale.";
+
+    function tick(){
+      if(!micAnalyser || !micCtx) return;
+      if(micCtx.state === "suspended") micCtx.resume().catch(()=>{});
+
+      const frame = addSpectralChromaFromAnalyserPlus(micAnalyser, micCtx, micChroma, micBassChroma);
+      micFrames++;
+      if(frame.added > 16 && frame.frameEnergy > 0.0035){
+        micVoiced++;
+        micFrameHistory.push(frame.frameChroma);
+        if(micFrameHistory.length > 360) micFrameHistory.shift();
+        micBassHistory.push(frame.bassPc);
+        if(micBassHistory.length > 360) micBassHistory.shift();
+
+        const chord = frame.chord || estimateFrameChord(frame.frameChroma);
+        if(chord){
+          const k = `${chord.root}:${chord.quality}`;
+          micChordCounts[k] = (micChordCounts[k] || 0) + Math.min(2.2, chord.score);
+          pushStableChord(chord);
+        }
+      }
+
+      const elapsed = (performance.now() - micStartTime)/1000;
+      setMicProgress(12 + 88 * elapsed / micDuration);
+      if(elapsed >= micDuration){
+        finishMicAnalysis();
+      }else{
+        micAnimation = requestAnimationFrame(tick);
+      }
+    }
+    tick();
+  }catch(err){
+    status.textContent = "Microfono non disponibile: " + browserMicErrorMessage(err);
+    setMicProgress(0);
+    stopMicTracks();
+  }
+}
+
+function finishMicAnalysis(){
+  const status = document.getElementById("micStatus");
+  const result = document.getElementById("micResult");
+  flushStableChord();
+  stopMicTracks();
+  setMicProgress(100);
+
+  if(micVoiced < 18){
+    status.textContent = "Poco materiale armonico utile: il microfono ha sentito troppo poco segnale stabile. Usa 20-30 secondi, alza la base, e fai sentire accordi/basso.";
+    return;
+  }
+
+  const top = rankChroma(micChroma, micBassChroma, micChordCounts, micBassHistory);
+  if(!top){
+    status.textContent = "Non riesco a stimare la tonalità dal microfono.";
+    return;
+  }
+
+  detectedRoot = top[0].root;
+  detectedMode = top[0].mode;
+  const confidence = keyConfidence(top, micVoiced);
+  document.getElementById("useDetectedBtn").disabled = false;
+  status.textContent = "Analisi microfono completata con metodo musicale.";
+  result.innerHTML = buildKeyResultHTML(top, "microfono", confidence);
 }
 
 document.getElementById("startMicBtn").onclick = startMicAnalysis;
