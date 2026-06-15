@@ -37,7 +37,6 @@ body:not(.start-mode) #startScreen{display:none}
 body.start-mode .home-floating{display:none}
 .section-home{width:auto;display:inline-block;margin:0 0 12px;padding:8px 12px;border-radius:999px;font-size:14px}
 .section-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-#scalePanel,#scalaSuggerita{scroll-margin-top:14px}
 
 </style>
 </head>
@@ -587,32 +586,7 @@ function render(){
     box.appendChild(div);
   });
 }
-function scrollToSuggestedScaleAfterRender(){
-  const el = document.getElementById("scalaSuggerita");
-  if(!el) return;
-  if(document.activeElement && typeof document.activeElement.blur === "function"){
-    document.activeElement.blur();
-  }
-  const y = Math.max(0, el.getBoundingClientRect().top + window.pageYOffset - 12);
-  window.scrollTo({top:y, behavior:"smooth"});
-}
-
-function renderAndGoToScalePanel(){
-  document.body.classList.remove("start-mode");
-  render();
-
-  // Dopo il calcolo porta subito alla scala suggerita per improvvisare.
-  // Ripetiamo lo scroll per rendere stabile il comportamento su mobile/Safari.
-  requestAnimationFrame(()=>{
-    requestAnimationFrame(()=>{
-      scrollToSuggestedScaleAfterRender();
-      setTimeout(scrollToSuggestedScaleAfterRender, 180);
-      setTimeout(scrollToSuggestedScaleAfterRender, 520);
-    });
-  });
-}
-
-document.getElementById("renderBtn").onclick=renderAndGoToScalePanel;
+document.getElementById("renderBtn").onclick=render;
 tonicSel.onchange=render; document.getElementById("keyQuality").onchange=render; document.getElementById("viewMode").onchange=render; document.getElementById("showHarmonica").onchange=render; document.getElementById("showWebKeySearch").onchange=toggleWebKeySearch; genreSelect.onchange=render;
 
 function toggleWebKeySearch(){
