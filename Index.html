@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Scalometro Musicale Pro - scale utili per improvvisare</title>
+<title>Scaloweb Pro - scale utili per improvvisare</title>
 <style>
 :root{--bg:#f6f3ec;--card:#fffaf0;--ink:#201b15;--muted:#6d6257;--accent:#8b4513;--line:#ddd1bf}
 *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
@@ -20,16 +20,70 @@ button:disabled{opacity:.55;cursor:not-allowed}.hint{font-size:13px;color:var(--
 .tonic{background:#241a13;color:white}.warning{background:#fff4d7;border-color:#e5c16c}
 .meter{height:12px;border-radius:99px;background:#eee;overflow:hidden}.bar{height:100%;width:0;background:var(--accent);transition:.2s}
 table{width:100%;border-collapse:collapse;background:white;border-radius:12px;overflow:hidden}td,th{padding:9px;border-bottom:1px solid var(--line);text-align:left}th{background:#f1e7d8}
+
+/* Schermata iniziale */
+body.start-mode header,
+body.start-mode main{display:none}
+#startScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(145deg,#241a13,#8b4513);color:white;text-align:center}
+body:not(.start-mode) #startScreen{display:none}
+.start-card{max-width:680px;background:#fffaf0;color:var(--ink);border-radius:24px;padding:34px 24px;box-shadow:0 18px 50px #0005;border:1px solid #ffffff55}
+.start-card h1{font-size:clamp(30px,6vw,54px);margin:0 0 10px;color:#241a13}
+.start-card p{font-size:18px;color:var(--muted);margin:0 0 22px}
+.start-card button{font-size:20px;padding:14px 18px;border-radius:14px}
+.start-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:14px}
+.start-links button{font-size:16px;padding:12px 14px}
+
+.home-floating{position:fixed;right:16px;bottom:16px;z-index:9999;width:auto;min-width:130px;padding:11px 14px;border-radius:999px;box-shadow:0 8px 24px #0003}
+body.start-mode .home-floating{display:none}
+.section-home{width:auto;display:inline-block;margin:0 0 12px;padding:8px 12px;border-radius:999px;font-size:14px}
+.section-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+
 </style>
 </head>
-<body>
+<body class="start-mode">
+
+<section id="startScreen" aria-label="Schermata iniziale">
+  <div class="start-card">
+    <h1>Scaloweb Pro</h1>
+    <p>Vai subito alla schermata che ti serve.</p>
+    <button id="goToSuggestedScaleBtn" type="button">🎷 Scala suggerita per improvvisare</button>
+    <div class="start-links" aria-label="Collegamenti rapidi">
+      <button type="button" onclick="goToSection('impostazioniPanel')">🎯 Inserisci dati base</button>
+      <button type="button" onclick="goToSection('scalePanel')">🎼 Scale di riferimento</button>
+      <button type="button" onclick="goToSection('musicistaPanel')">🎷 Modalità musicista</button>
+      <button type="button" onclick="goToSection('microfonoPanel')">🎤 Microfono</button>
+      <button type="button" onclick="goToSection('mp3Panel')">🎵 Analisi MP3</button>
+      <button type="button" onclick="goToWebKeyPanel()">🌐 Cerca tonalità da testo canzone sul web</button>
+      <button type="button" onclick="goToHarmonica()">🎶 Armonica Diatonica</button>
+    </div>
+  </div>
+</section>
+
 <header>
-<h1>Scalometro musicale Pro — improvvisazione</h1>
+<h1>Scaloweb Pro — improvvisazione</h1>
 <p>Scale, trasposizione per Sib/Mib, armonica, analisi microfono/MP3 e consigli pratici per improvvisare.</p>
 </header>
+<button id="homeFloatingBtn" class="home-floating secondary" type="button" onclick="tornaHome()">🏠 Home</button>
 
 <main>
+
 <section class="panel">
+<h2>📚 Menu rapido</h2>
+<div class="controls">
+<button type="button" onclick="tornaHome()">🏠 Home</button>
+<button type="button" onclick="goToSection('impostazioniPanel')">🎯 Inserisci dati base</button>
+<button type="button" onclick="goToSection('scalaSuggerita')">Scala suggerita</button>
+<button type="button" onclick="goToSection('scalePanel')">🎼 Scale di riferimento</button>
+<button type="button" onclick="goToSection('musicistaPanel')">🎷 Modalità musicista</button>
+<button type="button" onclick="goToSection('microfonoPanel')">🎤 Microfono</button>
+<button type="button" onclick="goToSection('mp3Panel')">🎵 Analisi MP3</button>
+<button type="button" onclick="goToWebKeyPanel()">🌐 Cerca tonalità da testo canzone sul web</button>
+<button type="button" onclick="goToHarmonica()">🎶 Armonica Diatonica</button>
+</div>
+</section>
+
+<section id="impostazioniPanel" class="panel">
+  <button class="section-home secondary" type="button" onclick="tornaHome()">🏠 Home</button>
   <div class="controls">
     <div>
       <label for="tonic">Tonica da concerto</label>
@@ -78,8 +132,8 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
   <div id="harmonicaInfo"></div>
 </section>
 
-<section class="panel warning">
-  <h2>Analisi tonalità da MP3</h2>
+<section id="mp3Panel" class="panel warning">
+  <div class="section-title-row"><h2>Analisi tonalità da MP3</h2><button class="section-home secondary" type="button" onclick="tornaHome()">🏠 Home</button></div>
   <div class="controls">
     <div>
       <label for="audioFile">Allega MP3</label>
@@ -100,8 +154,8 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
   <div id="analysisResult"></div>
 </section>
 
-<section class="panel warning">
-  <h2>Microfono: scale utili per improvvisare</h2>
+<section id="microfonoPanel" class="panel warning">
+  <div class="section-title-row"><h2>Microfono: scale utili per improvvisare</h2><button class="section-home secondary" type="button" onclick="tornaHome()">🏠 Home</button></div>
   <div class="controls">
     <div>
       <label for="micSeconds">Durata ascolto</label>
@@ -139,8 +193,8 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
 </section>
 
 
-<section class="panel warning">
-  <h2>Analisi audio da scheda/browser <span class="small">(consigliata su PC)</span></h2>
+<section id="audioSchedaPanel" class="panel warning">
+  <div class="section-title-row"><h2>Analisi audio da scheda/browser <span class="small">(consigliata su PC)</span></h2><button class="section-home secondary" type="button" onclick="tornaHome()">🏠 Home</button></div>
   <div class="controls">
     <div>
       <label for="tabSeconds">Durata ascolto</label>
@@ -167,7 +221,7 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
 </section>
 
 <section id="webKeyPanel" class="panel warning" style="display:none">
-  <h2>Cerca tonalità da testo canzone sul web</h2>
+  <div class="section-title-row"><h2>🌐 Cerca tonalità da testo canzone sul web</h2><button class="section-home secondary" type="button" onclick="tornaHome()">🏠 Home</button></div>
   <div class="controls">
     <div>
       <label for="songTitle">Titolo canzone</label>
@@ -199,13 +253,13 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
 
 
 
-<section class="panel">
-  <h2>Scala suggerita per improvvisare</h2>
+<section id="scalaSuggerita" class="panel">
+  <div class="section-title-row"><h2>Scala suggerita per improvvisare</h2><button class="section-home secondary" type="button" onclick="tornaHome()">🏠 Home</button></div>
   <div id="genreSuggestion"></div>
 </section>
 
-<section class="panel">
-  <h2>Modalità musicista</h2>
+<section id="musicistaPanel" class="panel">
+  <div class="section-title-row"><h2>🎷 Modalità musicista</h2><button class="section-home secondary" type="button" onclick="tornaHome()">🏠 Home</button></div>
   <p class="hint">Trasforma la tonalità corrente in indicazioni pratiche per palco, prova e improvvisazione.</p>
   <div class="controls">
     <div>
@@ -220,8 +274,8 @@ table{width:100%;border-collapse:collapse;background:white;border-radius:12px;ov
   <div id="performanceAdvice"></div>
 </section>
 
-<section class="panel">
-  <h2>Scale di riferimento</h2>
+<section id="scalePanel" class="panel">
+  <div class="section-title-row"><h2>🎼 Scale di riferimento</h2><button class="section-home secondary" type="button" onclick="tornaHome()">🏠 Home</button></div>
   <div id="scales" class="grid"></div>
 </section>
 </main>
@@ -414,28 +468,45 @@ function likelyDiatonicChords(root, quality){
   ];
 }
 
-function instrumentAdvice(root, quality){
-  const bb = mod(root+2);
-  const eb = mod(root-3);
-  const harp1 = root;
-  const harp2 = mod(root+5);
-  const harp3 = mod(root+10);
-  const harp12 = mod(root+7);
+function viewModeLabel(mode){
+  if(mode==="Bb") return "Strumento in Sib";
+  if(mode==="Eb") return "Strumento in Mib";
+  return "Strumento in DO / concerto";
+}
+
+function currentViewData(){
+  const concert = +tonicSel.value;
+  const mode = document.getElementById("viewMode").value;
+  return { concert, mode, root: displayRoot(concert, mode) };
+}
+
+function instrumentAdvice(root, quality, mode="concert", concertRoot=null){
+  const isConcertView = mode === "concert";
+  const concert = concertRoot === null ? root : concertRoot;
+  const bb = mod(concert+2);
+  const eb = mod(concert-3);
+  const harp1 = concert;
+  const harp2 = mod(concert+5);
+  const harp3 = mod(concert+10);
+  const harp12 = mod(concert+7);
   const mainScale = quality==="minor" ? "Pentatonica minore / blues minore" : "Pentatonica maggiore + blues";
   const safe = quality==="minor" ? [0,3,5,7,10] : [0,2,4,7,9];
   const color = quality==="minor" ? [0,2,3,5,7,9,10] : [0,2,4,5,7,9,10];
   const colorName = quality==="minor" ? "Dorico se il VI grado è naturale" : "Misolidio su accordi dominanti/blues";
-  return `
-    <div class="scale" style="margin-top:12px">
-      <h3>Indicazioni rapide per ${NAMES[root]} ${qualityName(quality)}</h3>
-      <p>
+  const badges = isConcertView ? `
         <span class="badge">Sax/clarinetto Sib: <b>${NAMES[bb]}</b></span>
         <span class="badge">Sax Mib: <b>${NAMES[eb]}</b></span>
         <span class="badge">Armonica 1ª: <b>${NAMES[harp1]}</b></span>
         <span class="badge">Armonica 2ª: <b>${NAMES[harp2]}</b></span>
         <span class="badge">Armonica 3ª: <b>${NAMES[harp3]}</b></span>
-        <span class="badge">Armonica 12ª: <b>${NAMES[harp12]}</b></span>
-      </p>
+        <span class="badge">Armonica 12ª: <b>${NAMES[harp12]}</b></span>` : `
+        <span class="badge">Vista selezionata: <b>${viewModeLabel(mode)}</b></span>
+        <span class="badge">Concerto: <b>${NAMES[concert]} ${qualityName(quality)}</b></span>
+        <span class="badge">Nota/scala da leggere: <b>${NAMES[root]} ${qualityName(quality)}</b></span>`;
+  return `
+    <div class="scale" style="margin-top:12px">
+      <h3>Indicazioni rapide per ${NAMES[root]} ${qualityName(quality)} <span class="small">(${viewModeLabel(mode)})</span></h3>
+      <p>${badges}</p>
       <div class="grid">
         <div class="scale"><h3>Scala sicura: ${NAMES[root]} ${mainScale}</h3><div class="notes">${renderNoteSet(root,safe)}</div></div>
         <div class="scale"><h3>Colore: ${NAMES[root]} ${colorName}</h3><div class="notes">${renderNoteSet(root,color)}</div></div>
@@ -445,29 +516,35 @@ function instrumentAdvice(root, quality){
 }
 
 function performanceAdvice(){
-  const concert = +tonicSel.value;
+  const view = currentViewData();
   const quality = document.getElementById("keyQuality").value;
-  document.getElementById("performanceAdvice").innerHTML = instrumentAdvice(concert, quality) + `
+  document.getElementById("performanceAdvice").innerHTML = instrumentAdvice(view.root, quality, view.mode, view.concert) + `
     <div class="scale" style="margin-top:12px">
-      <h3>Accordi di riferimento probabili</h3>
+      <h3>Accordi di riferimento probabili <span class="small">(${viewModeLabel(view.mode)})</span></h3>
       <table>
         <thead><tr><th>Funzione</th><th>Accordo</th><th>Uso musicale</th></tr></thead>
         <tbody>
-          ${likelyDiatonicChords(concert, quality).map(c=>`<tr><td>${c.role}</td><td>${chordName(c.root,c.mode)}</td><td>${c.role.includes("V")?"tensione/dominante":c.role.toLowerCase().includes("i")?"centro/riposo":"colore o passaggio"}</td></tr>`).join("")}
+          ${likelyDiatonicChords(view.root, quality).map(c=>`<tr><td>${c.role}</td><td>${chordName(c.root,c.mode)}</td><td>${c.role.includes("V")?"tensione/dominante":c.role.toLowerCase().includes("i")?"centro/riposo":"colore o passaggio"}</td></tr>`).join("")}
         </tbody>
       </table>
+      <p class="hint">Questi accordi sono mostrati nella stessa visualizzazione scelta in “Visualizza scale per”.</p>
     </div>`;
 }
 
 function showMusicalAlternatives(){
-  const root = +tonicSel.value;
+  const view = currentViewData();
+  const root = view.root;
   const quality = document.getElementById("keyQuality").value;
   const rel = quality==="minor" ? relMajor(root) : relMinor(root);
   const dom = mod(root+7);
   const dor = quality==="minor" ? root : mod(root+2);
   document.getElementById("performanceAdvice").innerHTML = `
     <div class="scale" style="margin-top:12px">
-      <h3>Alternative da verificare a orecchio</h3>
+      <h3>Alternative da verificare a orecchio <span class="small">(${viewModeLabel(view.mode)})</span></h3>
+      <p>
+        <span class="badge">Concerto: <b>${NAMES[view.concert]} ${qualityName(quality)}</b></span>
+        <span class="badge">Vista attuale: <b>${NAMES[root]} ${qualityName(quality)}</b></span>
+      </p>
       <table>
         <thead><tr><th>Ipotesi</th><th>Quando è plausibile</th><th>Prova pratica</th></tr></thead>
         <tbody>
@@ -477,6 +554,7 @@ function showMusicalAlternatives(){
           <tr><td>${NAMES[dor]} Dorico/Misolidio</td><td>Il brano non sembra né maggiore né minore classico.</td><td>Ascolta il VI grado: naturale = dorico; ♭VII forte = misolidio.</td></tr>
         </tbody>
       </table>
+      <p class="hint">Anche queste alternative seguono la scelta di “Visualizza scale per”.</p>
     </div>`;
 }
 
@@ -587,6 +665,48 @@ document.getElementById("openWebSearchBtn").onclick = openWebKeySearch;
 
 toggleWebKeySearch();
 render();
+
+function tornaHome(){
+  document.body.classList.add("start-mode");
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function goToSection(id){
+  document.body.classList.remove("start-mode");
+  render();
+  requestAnimationFrame(()=>{
+    const el = document.getElementById(id);
+    if(el) el.scrollIntoView({behavior:"smooth", block:"start"});
+  });
+}
+
+function goToWebKeyPanel(){
+  document.body.classList.remove("start-mode");
+  const sel = document.getElementById("showWebKeySearch");
+  if(sel) sel.value = "yes";
+  toggleWebKeySearch();
+  render();
+  requestAnimationFrame(()=>{
+    const el = document.getElementById("webKeyPanel");
+    if(el) el.scrollIntoView({behavior:"smooth", block:"start"});
+  });
+}
+
+function goToHarmonica(){
+  document.body.classList.remove("start-mode");
+  const sel = document.getElementById("showHarmonica");
+  if(sel) sel.value = "yes";
+  render();
+  requestAnimationFrame(()=>{
+    const el = document.getElementById("harmonicaInfo");
+    if(el) el.scrollIntoView({behavior:"smooth", block:"start"});
+  });
+}
+
+document.getElementById("goToSuggestedScaleBtn").onclick = function(){
+  goToSection("scalaSuggerita");
+};
+
 
 // --- Analisi tonalità MP3 ---
 const majorProfile = [6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88];
