@@ -587,8 +587,8 @@ function render(){
     box.appendChild(div);
   });
 }
-function scrollToScalePanelAfterRender(){
-  const el = document.getElementById("scalePanel");
+function scrollToSuggestedScaleAfterRender(){
+  const el = document.getElementById("scalaSuggerita");
   if(!el) return;
   if(document.activeElement && typeof document.activeElement.blur === "function"){
     document.activeElement.blur();
@@ -601,13 +601,13 @@ function renderAndGoToScalePanel(){
   document.body.classList.remove("start-mode");
   render();
 
-  // Su mobile/Safari il DOM può aggiornarsi dopo il click: ripetiamo lo scroll
-  // in due frame + un piccolo fallback, così il pulsante porta davvero alle scale.
+  // Dopo il calcolo porta subito alla scala suggerita per improvvisare.
+  // Ripetiamo lo scroll per rendere stabile il comportamento su mobile/Safari.
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
-      scrollToScalePanelAfterRender();
-      setTimeout(scrollToScalePanelAfterRender, 180);
-      setTimeout(scrollToScalePanelAfterRender, 520);
+      scrollToSuggestedScaleAfterRender();
+      setTimeout(scrollToSuggestedScaleAfterRender, 180);
+      setTimeout(scrollToSuggestedScaleAfterRender, 520);
     });
   });
 }
