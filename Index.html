@@ -37,6 +37,7 @@ body:not(.start-mode) #startScreen{display:none}
 body.start-mode .home-floating{display:none}
 .section-home{width:auto;display:inline-block;margin:0 0 12px;padding:8px 12px;border-radius:999px;font-size:14px}
 .section-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+#scalePanel,#scalaSuggerita{scroll-margin-top:14px}
 
 </style>
 </head>
@@ -124,7 +125,7 @@ body.start-mode .home-floating{display:none}
     </div>
     <div>
       <label>&nbsp;</label>
-      <button id="renderBtn" type="button">Calcola scale</button>
+      <button id="renderBtn">Calcola scale</button>
     </div>
   </div>
   <p class="hint">Esempio richiesto: Sol concerto visualizzato per strumento in Mib diventa Mi. Ora puoi scegliere anche tonalità concerto maggiore o minore.</p>
@@ -586,27 +587,32 @@ function render(){
     box.appendChild(div);
   });
 }
-function scrollToScalePanelRobusto(){
+function scrollToScalePanelAfterRender(){
   const el = document.getElementById("scalePanel");
   if(!el) return;
-  const doScroll = (behavior="smooth") => {
-    const y = el.getBoundingClientRect().top + window.pageYOffset - 12;
-    window.scrollTo({top: Math.max(0, y), behavior});
-  };
-  requestAnimationFrame(()=>requestAnimationFrame(()=>doScroll("smooth")));
-  setTimeout(()=>doScroll("smooth"), 90);
-  setTimeout(()=>doScroll("auto"), 420);
+  if(document.activeElement && typeof document.activeElement.blur === "function"){
+    document.activeElement.blur();
+  }
+  const y = Math.max(0, el.getBoundingClientRect().top + window.pageYOffset - 12);
+  window.scrollTo({top:y, behavior:"smooth"});
 }
 
-const renderBtn = document.getElementById("renderBtn");
-if(renderBtn){
-  renderBtn.type = "button";
-  renderBtn.onclick = function(e){
-    if(e) e.preventDefault();
-    render();
-    scrollToScalePanelRobusto();
-  };
+function renderAndGoToScalePanel(){
+  document.body.classList.remove("start-mode");
+  render();
+
+  // Su mobile/Safari il DOM può aggiornarsi dopo il click: ripetiamo lo scroll
+  // in due frame + un piccolo fallback, così il pulsante porta davvero alle scale.
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      scrollToScalePanelAfterRender();
+      setTimeout(scrollToScalePanelAfterRender, 180);
+      setTimeout(scrollToScalePanelAfterRender, 520);
+    });
+  });
 }
+
+document.getElementById("renderBtn").onclick=renderAndGoToScalePanel;
 tonicSel.onchange=render; document.getElementById("keyQuality").onchange=render; document.getElementById("viewMode").onchange=render; document.getElementById("showHarmonica").onchange=render; document.getElementById("showWebKeySearch").onchange=toggleWebKeySearch; genreSelect.onchange=render;
 
 function toggleWebKeySearch(){
