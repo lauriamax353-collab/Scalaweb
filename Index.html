@@ -586,7 +586,13 @@ function render(){
     box.appendChild(div);
   });
 }
-document.getElementById("renderBtn").onclick=render;
+document.getElementById("renderBtn").onclick=function(){
+  render();
+  requestAnimationFrame(()=>{
+    const el = document.getElementById("scalePanel");
+    if(el) el.scrollIntoView({behavior:"smooth", block:"start"});
+  });
+};
 tonicSel.onchange=render; document.getElementById("keyQuality").onchange=render; document.getElementById("viewMode").onchange=render; document.getElementById("showHarmonica").onchange=render; document.getElementById("showWebKeySearch").onchange=toggleWebKeySearch; genreSelect.onchange=render;
 
 function toggleWebKeySearch(){
