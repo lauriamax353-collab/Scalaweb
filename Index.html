@@ -124,7 +124,10 @@ body.start-mode .home-floating{display:none}
     </div>
     <div>
       <label>&nbsp;</label>
-      <button id="renderBtn">Calcola scale</button>
+      <div style="display:flex;gap:8px;">
+        <button id="renderBtn" style="flex:1;">Calcola scale</button>
+        <button type="button" class="secondary" style="flex:1;" onclick="goToSection('scalePanel')">🎼 Visualizza scale</button>
+      </div>
     </div>
   </div>
   <p class="hint">Esempio richiesto: Sol concerto visualizzato per strumento in Mib diventa Mi. Ora puoi scegliere anche tonalità concerto maggiore o minore.</p>
@@ -586,7 +589,10 @@ function render(){
     box.appendChild(div);
   });
 }
-document.getElementById("renderBtn").onclick=render;
+document.getElementById("renderBtn").onclick = () => {
+  render();
+  goToSection('scalePanel');
+};
 tonicSel.onchange=render; document.getElementById("keyQuality").onchange=render; document.getElementById("viewMode").onchange=render; document.getElementById("showHarmonica").onchange=render; document.getElementById("showWebKeySearch").onchange=toggleWebKeySearch; genreSelect.onchange=render;
 
 function toggleWebKeySearch(){
