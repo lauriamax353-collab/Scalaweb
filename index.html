@@ -963,22 +963,36 @@ function registerBeatOnset(now){
 async function startBeatFollower(){
   if(beatFollowerRunning) return;
   if(!isLocalOrSecure()){
-    setBeatStatus("Il microfono richiede HTTPS o localhost.");
+    setBeatStatus("Il microfono richiede HTTPS o localhost. Da cellulare apri la pagina con indirizzo https://, non come file locale.");
     return;
   }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    setBeatStatus("Microfono non supportato da questo browser.");
+    setBeatStatus("Microfono non supportato da questo browser. Aggiorna Safari/Chrome oppure controlla i permessi del sito.");
     return;
   }
+
   const startBtn = document.getElementById("startBeatFollowerBtn");
   const stopBtn = document.getElementById("stopBeatFollowerBtn");
   if(startBtn) startBtn.disabled = true;
   if(stopBtn) stopBtn.disabled = false;
   renderBeatLeds(-1);
-  setBeatStatus("Richiedo accesso al microfono usando la stessa gestione permessi della funzione Microfono...");
+
+  const mobileMsg = isProbablyMobileDevice()
+    ? "Da cellulare: premi Consenti quando compare la richiesta del microfono. Se non compare, controlla i permessi del sito nel browser."
+    : "Richiedo accesso al microfono...";
+  setBeatStatus(mobileMsg);
+
   try{
-    beatStream = await openMicrophoneStream();
+    // Su iPhone/Android l'AudioContext deve essere creato e sbloccato nello stesso tap
+    // del pulsante. Per questo lo apriamo prima della richiesta microfono.
     beatCtx = await createRunningAudioContext();
+
+    beatStream = await openMicrophoneStream();
+
+    if(beatCtx.state === "suspended"){
+      await beatCtx.resume();
+    }
+
     beatSource = beatCtx.createMediaStreamSource(beatStream);
     beatAnalyser = beatCtx.createAnalyser();
     beatAnalyser.fftSize = isProbablyMobileDevice() ? 2048 : 4096;
@@ -993,35 +1007,47 @@ async function startBeatFollower(){
     beatPhaseTime = performance.now();
     beatCurrentIndex = 0;
     beatConfidence = 0.2;
-    setBeatStatus("Ascolto il groove: fai sentire 2–4 battute chiare di cassa/rullante/hi-hat.");
+    setBeatStatus("Microfono Jam attivo. Ascolto il groove: fai sentire 2–4 battute chiare di cassa/rullante/hi-hat.");
 
     function tick(){
       if(!beatFollowerRunning || !beatAnalyser) return;
+      if(beatCtx && beatCtx.state === "suspended"){
+        beatCtx.resume().catch(()=>{});
+      }
+
       const now = performance.now();
       const energy = timeDomainEnergy(beatAnalyser);
       beatEnergyHistory.push(energy);
       if(beatEnergyHistory.length > 48) beatEnergyHistory.shift();
+
       const avg = beatEnergyHistory.reduce((a,b)=>a+b,0) / beatEnergyHistory.length;
       const params = beatSensitivityParams();
-      const isOnset = beatEnergyHistory.length > 10 && energy > Math.max(0.018, avg * params.threshold) && (now - beatLastOnset) > params.minGap;
+      const isOnset = beatEnergyHistory.length > 10 &&
+        energy > Math.max(0.018, avg * params.threshold) &&
+        (now - beatLastOnset) > params.minGap;
+
       if(isOnset) registerBeatOnset(now);
       else beatConfidence = Math.max(0, beatConfidence - 0.0018);
 
       const subMs = beatPeriodMs / 2;
       const steps = Math.max(0, Math.floor((now - beatPhaseTime) / subMs));
       beatCurrentIndex = steps % beatSubdivisionCount();
+
       renderBeatLeds(beatCurrentIndex);
       updateEntrySign(beatCurrentIndex === 0, beatCurrentIndex === beatSubdivisionCount()-1);
       updateBeatReadout();
+
       beatAnimation = requestAnimationFrame(tick);
     }
+
     tick();
   }catch(err){
-    setBeatStatus("Microfono per LED Jam non disponibile: " + browserMicErrorMessage(err));
-    stopBeatFollower();
+    const msg = "Microfono per LED Jam non disponibile: " + browserMicErrorMessage(err);
+    cleanupBeatFollower(false);
+    setBeatStatus(msg);
   }
 }
-function stopBeatFollower(){
+function cleanupBeatFollower(showStoppedMessage=true){
   beatFollowerRunning = false;
   if(beatAnimation) cancelAnimationFrame(beatAnimation);
   beatAnimation = null;
@@ -1039,7 +1065,11 @@ function stopBeatFollower(){
   if(stopBtn) stopBtn.disabled = true;
   const syncEl = document.getElementById("beatSync");
   if(syncEl){ syncEl.textContent = "fermo"; syncEl.className = ""; }
-  setBeatStatus("LED follower fermato.");
+  if(showStoppedMessage) setBeatStatus("LED follower fermato.");
+}
+
+function stopBeatFollower(){
+  cleanupBeatFollower(true);
 }
 function armBeatRealign(){
   beatManualArm = true;
@@ -2157,7 +2187,13 @@ const jamQuickBtn = document.getElementById("jamQuickBtn");
 if(jamQuickBtn) jamQuickBtn.onclick = function(){ openJamProgressionsAndRiffs(); };
 
 const startBeatFollowerBtn = document.getElementById("startBeatFollowerBtn");
-if(startBeatFollowerBtn) startBeatFollowerBtn.onclick = startBeatFollower;
+if(startBeatFollowerBtn){
+  startBeatFollowerBtn.onclick = startBeatFollower;
+  startBeatFollowerBtn.addEventListener("touchend", function(ev){
+    ev.preventDefault();
+    startBeatFollower();
+  }, {passive:false});
+}
 const stopBeatFollowerBtn = document.getElementById("stopBeatFollowerBtn");
 if(stopBeatFollowerBtn) stopBeatFollowerBtn.onclick = stopBeatFollower;
 const tapBeatBtn = document.getElementById("tapBeatBtn");
