@@ -95,6 +95,12 @@ body.stage-mode .beat-led.active{background:#00d1ff;color:#001018;border-color:#
 body.stage-mode .entry-sign{background:#081018;border-color:#335064;color:#e8fbff}
 body.stage-mode .entry-sign.on{background:#00d1ff;color:#001018}
 
+.riff-box{background:white;border:1px solid var(--line);border-radius:13px;padding:12px}
+.riff-box h3{margin:0 0 8px;font-size:17px}
+.riff-pattern{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px;background:#f2eadf;border-radius:10px;padding:8px;margin:8px 0;overflow:auto}
+body.stage-mode .riff-box{background:#101010;border-color:#ffd54a}
+body.stage-mode .riff-pattern{background:#000;color:#fff7d6;border:1px solid #ffd54a}
+
 </style>
 </head>
 <body class="start-mode">
@@ -361,7 +367,7 @@ body.stage-mode .entry-sign.on{background:#00d1ff;color:#001018}
     </div>
     <div>
       <label>&nbsp;</label>
-      <button id="renderJamBtn">Mostra progressione</button>
+      <button id="renderJamBtn" type="button" onclick="openJamProgressionsAndRiffs()">Mostra progressioni + riff</button>
     </div>
   </div>
   <div class="led-follower" aria-label="LED follower batterista">
@@ -407,6 +413,7 @@ body.stage-mode .entry-sign.on{background:#00d1ff;color:#001018}
     <div id="beatFollowerStatus" class="small"></div>
   </div>
 
+  <div id="jamProgressionsRiffsAnchor" style="scroll-margin-top:18px"></div>
   <div id="jamSessionResult"></div>
 </section>
 
@@ -702,6 +709,76 @@ function progressionToHTML(root, quality, title, degrees, groove){
   </div>`;
 }
 
+function riffNoteSet(root, ints){
+  return ints.map((x,i)=>`<span class="note ${i===0?'tonic':''}">${NAMES[mod(root+x)]}</span>`).join("");
+}
+
+function riffToHTML(root, item){
+  return `<div class="riff-box">
+    <h3>${item.title}</h3>
+    <div class="notes">${riffNoteSet(root, item.ints)}</div>
+    <div class="riff-pattern">${item.rhythm}</div>
+    <p class="hint">${item.tip}</p>
+  </div>`;
+}
+
+function jamRiffs(root, quality, style){
+  const s = style === "auto" ? jamStyleFromGenre() : style;
+  const isMinor = quality === "minor";
+  if(s === "blues"){
+    return isMinor ? [
+      {title:"Riff blues minore — call", ints:[0,3,5,6,7,6,5,3], rhythm:"1  -  ♭3  4  ♭5  5  ♭5  4  ♭3", tip:"Suonalo corto, poi lascia mezza battuta di risposta/silenzio."},
+      {title:"Risposta blues minore", ints:[7,10,7,6,5,3,0], rhythm:"5  ♭7  5  ♭5  4  ♭3  1", tip:"Chiudi sulla tonica quando torna l’accordo i."}
+    ] : [
+      {title:"Riff blues/rock — call", ints:[0,3,4,5,7,5,4,3], rhythm:"1  ♭3  3  4  5  4  3  ♭3", tip:"Mescola terza minore e maggiore: funziona molto su blues maggiore."},
+      {title:"Risposta dominante", ints:[7,10,7,5,4,3,0], rhythm:"5  ♭7  5  4  3  ♭3  1", tip:"Ottimo su I7 e V7; accentua ♭7 come tensione."}
+    ];
+  }
+  if(s === "funk"){
+    return isMinor ? [
+      {title:"Riff funk dorico", ints:[0,0,3,5,7,5,3,0], rhythm:"1  x  1  ♭3  4  5  4  ♭3  1", tip:"Ripeti poche note in sedicesimi, con ghost notes tra gli accenti."},
+      {title:"Riff risposta soul", ints:[7,10,9,7,5,3,0], rhythm:"5  ♭7  6  5  4  ♭3  1", tip:"Il 6 naturale dà colore dorico se il groove lo permette."}
+    ] : [
+      {title:"Riff funk dominante", ints:[0,0,4,5,7,10,7,5], rhythm:"1  x  1  3  4  5  ♭7  5  4", tip:"Tieni corto il riff e ripetilo: la ♭7 crea spinta."},
+      {title:"Riff soul maggiore", ints:[0,2,4,7,9,7,4,2], rhythm:"1  2  3  5  6  5  3  2", tip:"Più cantabile: bene su giri I–vi–IV–V."}
+    ];
+  }
+  if(s === "jazz"){
+    return isMinor ? [
+      {title:"Frase ii–V–i minore", ints:[2,3,5,7,11,10,7,3,0], rhythm:"2  ♭3  4  5  7  ♭7  5  ♭3  1", tip:"Usala come linea di avvicinamento, non come riff fisso."},
+      {title:"Target sulle guide tones", ints:[3,7,10,11,0], rhythm:"♭3  5  ♭7  7  1", tip:"Risolvi la sensibile sulla tonica nel i."}
+    ] : [
+      {title:"Frase ii–V–I", ints:[2,4,5,7,9,11,0], rhythm:"2  3  4  5  6  7  1", tip:"Atterra sul 3 dell’accordo di arrivo per suono jazz più chiaro."},
+      {title:"Riff swing pentatonico", ints:[0,2,4,7,9,7,4,2], rhythm:"1  2  3  5  6  5  3  2", tip:"Swinga le crome e sposta gli accenti."}
+    ];
+  }
+  if(s === "latin"){
+    return isMinor ? [
+      {title:"Riff latin minore", ints:[0,3,5,7,8,7,5,3], rhythm:"1  ♭3  4  5  ♭6  5  4  ♭3", tip:"Frase legata, lascia respirare sulla clave."},
+      {title:"Riff andaluso", ints:[0,2,3,5,7,8,7,5,3], rhythm:"1  2  ♭3  4  5  ♭6  5  4  ♭3", tip:"Funziona bene sul giro i–VII–VI–V."}
+    ] : [
+      {title:"Riff bossa maggiore", ints:[0,2,4,5,7,9,7,5,4], rhythm:"1  2  3  4  5  6  5  4  3", tip:"Suonalo morbido, senza troppi attacchi."},
+      {title:"Montuno melodico", ints:[0,4,7,9,7,4,5,4], rhythm:"1  3  5  6  5  3  4  3", tip:"Ripetilo con piccole variazioni ritmiche."}
+    ];
+  }
+  if(s === "rock"){
+    return isMinor ? [
+      {title:"Riff rock minore", ints:[0,3,5,7,10,7,5,3], rhythm:"1  ♭3  4  5  ♭7  5  4  ♭3", tip:"Accenti forti su 1 e 5; aggiungi ♭5 per colore blues."},
+      {title:"Riff power risposta", ints:[0,0,7,10,7,5,3,0], rhythm:"1  1  5  ♭7  5  4  ♭3  1", tip:"Semplice e diretto per entrate su battere."}
+    ] : [
+      {title:"Riff rock maggiore", ints:[0,2,3,4,7,4,3,2], rhythm:"1  2  ♭3  3  5  3  ♭3  2", tip:"La blue note dà carattere senza uscire dal contesto."},
+      {title:"Riff misolidio", ints:[0,2,4,5,7,10,7,5], rhythm:"1  2  3  4  5  ♭7  5  4", tip:"Usalo sul giro I–♭VII–IV."}
+    ];
+  }
+  return isMinor ? [
+    {title:"Riff pop minore sicuro", ints:[0,3,5,7,10,7,5,3], rhythm:"1  ♭3  4  5  ♭7  5  4  ♭3", tip:"Pentatonica minore: facile da cantare e difficile da sbagliare."},
+    {title:"Riff melodico minore", ints:[0,2,3,5,7,5,3,2], rhythm:"1  2  ♭3  4  5  4  ♭3  2", tip:"Più cantabile, utile su strofe o ballad."}
+  ] : [
+    {title:"Riff pop maggiore sicuro", ints:[0,2,4,7,9,7,4,2], rhythm:"1  2  3  5  6  5  3  2", tip:"Pentatonica maggiore: ottima per entrare senza rischiare."},
+    {title:"Riff risposta cantabile", ints:[7,9,7,4,2,0], rhythm:"5  6  5  3  2  1", tip:"Usalo come risposta dopo una frase più lunga."}
+  ];
+}
+
 function jamStyleFromGenre(){
   const g = genreSelect.value;
   if(["funk","reggae"].includes(g)) return "funk";
@@ -976,14 +1053,33 @@ function renderJamSession(){
   const styleEl = document.getElementById("jamStyle");
   const style = styleEl ? styleEl.value : "auto";
   const list = jamProgressions(view.root, quality, style);
-  document.getElementById("jamSessionResult").innerHTML = `
+  const riffs = jamRiffs(view.root, quality, style);
+  const resolvedStyle = style === "auto" ? jamStyleFromGenre() : style;
+  const out = document.getElementById("jamSessionResult");
+  if(!out) return;
+  out.innerHTML = `
     <p><span class="badge">Tonalità vista: <b>${NAMES[view.root]} ${qualityName(quality)}</b></span>
        <span class="badge">Concerto: <b>${NAMES[view.concert]} ${qualityName(quality)}</b></span>
-       <span class="badge">${viewModeLabel(view.mode)}</span></p>
+       <span class="badge">${viewModeLabel(view.mode)}</span>
+       <span class="badge">Stile: <b>${resolvedStyle}</b></span></p>
+    <h3>Progressioni suggerite</h3>
     <div class="grid">
       ${list.map(x=>progressionToHTML(view.root, quality, x[0], x[1], x[2])).join("")}
     </div>
-    <p class="hint">Suggerimento live: pensa ogni accordo come area di riposo/tensione e usa la sezione “Modalità musicista” per scegliere le note forti.</p>`;
+    <h3>Riff suggeriti utilizzabili</h3>
+    <div class="grid">
+      ${riffs.map(x=>riffToHTML(view.root, x)).join("")}
+    </div>
+    <p class="hint">Suggerimento live: usa i riff come cellule da ripetere/variare. Le note sono già trasposte nella vista selezionata.</p>`;
+}
+
+function openJamProgressionsAndRiffs(){
+  document.body.classList.remove("start-mode");
+  renderJamSession();
+  requestAnimationFrame(()=>{
+    const target = document.getElementById("jamProgressionsRiffsAnchor") || document.getElementById("jamSessionResult") || document.getElementById("jamSessionPanel");
+    if(target) target.scrollIntoView({behavior:"smooth", block:"start"});
+  });
 }
 
 function toggleStageMode(){
@@ -2051,12 +2147,14 @@ const performanceBtn = document.getElementById("performanceBtn");
 if(performanceBtn) performanceBtn.onclick = performanceAdvice;
 const ambiguityBtn = document.getElementById("ambiguityBtn");
 if(ambiguityBtn) ambiguityBtn.onclick = showMusicalAlternatives;
+window.renderJamSession = renderJamSession;
+window.openJamProgressionsAndRiffs = openJamProgressionsAndRiffs;
 const renderJamBtn = document.getElementById("renderJamBtn");
-if(renderJamBtn) renderJamBtn.onclick = renderJamSession;
+if(renderJamBtn) renderJamBtn.onclick = openJamProgressionsAndRiffs;
 const jamStyle = document.getElementById("jamStyle");
 if(jamStyle) jamStyle.onchange = renderJamSession;
 const jamQuickBtn = document.getElementById("jamQuickBtn");
-if(jamQuickBtn) jamQuickBtn.onclick = function(){ renderJamSession(); goToSection("jamSessionPanel"); };
+if(jamQuickBtn) jamQuickBtn.onclick = function(){ openJamProgressionsAndRiffs(); };
 
 const startBeatFollowerBtn = document.getElementById("startBeatFollowerBtn");
 if(startBeatFollowerBtn) startBeatFollowerBtn.onclick = startBeatFollower;
