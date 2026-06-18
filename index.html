@@ -110,6 +110,14 @@ body.stage-mode .riff-pattern{background:#000;color:#fff7d6;border:1px solid #ff
 .live-scale-card h2{margin:0 0 8px;font-size:20px}
 .live-scale-main{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;align-items:center}
 .live-scale-card .notes{font-size:22px;font-weight:900}
+
+@media (max-width:1319px){
+  #liveScaleCard,
+  .live-scale-card{
+    display:none !important;
+  }
+}
+
 @media (min-width:1320px){
   body:not(.start-mode):not(.panic-mode) main{max-width:calc(100vw - 360px);margin-left:18px;margin-right:340px}
   .live-scale-card{position:fixed;top:104px;right:18px;width:300px;max-height:calc(100vh - 128px);overflow:auto;margin:0}
