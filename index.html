@@ -101,6 +101,63 @@ body.stage-mode .entry-sign.on{background:#00d1ff;color:#001018}
 body.stage-mode .riff-box{background:#101010;border-color:#ffd54a}
 body.stage-mode .riff-pattern{background:#000;color:#fff7d6;border:1px solid #ffd54a}
 
+/* Migliorie live non distruttive */
+.quick-group-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:14px;text-align:left}
+.quick-group{background:rgba(255,255,255,.78);border:1px solid var(--line);border-radius:18px;padding:14px}
+.quick-group h2,.quick-group h3{margin:0 0 10px;color:#241a13;font-size:16px;letter-spacing:.05em}
+.quick-group .start-links,.quick-group .controls{display:grid;grid-template-columns:1fr;gap:8px;margin:0}
+.live-scale-card{position:sticky;top:10px;z-index:8000;border:2px solid var(--accent);background:#fff7df;box-shadow:0 10px 28px #0002}
+.live-scale-card h2{margin:0 0 8px;font-size:20px}
+.live-scale-main{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;align-items:center}
+.live-scale-card .notes{font-size:22px;font-weight:900}
+@media (min-width:1320px){
+  body:not(.start-mode):not(.panic-mode) main{max-width:calc(100vw - 360px);margin-left:18px;margin-right:340px}
+  .live-scale-card{position:fixed;top:104px;right:18px;width:300px;max-height:calc(100vh - 128px);overflow:auto;margin:0}
+  .live-scale-main{grid-template-columns:1fr}
+}
+@media (min-width:1500px){
+  body:not(.start-mode):not(.panic-mode) main{max-width:1150px;margin-left:auto;margin-right:360px}
+  .live-scale-card{right:28px;width:320px}
+}
+.panic-button{background:#b00020!important;border-color:#b00020!important;color:#fff!important}
+.panic-screen{display:none;min-height:100vh;padding:24px;background:#050505;color:#fff7d6}
+body.panic-mode header,body.panic-mode main,body.panic-mode #homeFloatingBtn,body.panic-mode #stageModeBtn,body.panic-mode #startScreen{display:none!important}
+body.panic-mode #panicScreen{display:flex;align-items:center;justify-content:center}
+.panic-card{width:min(920px,100%);background:#111;border:3px solid #ff3b3b;border-radius:24px;padding:24px;text-align:center;box-shadow:0 0 40px #ff3b3b44}
+.panic-card h1{font-size:clamp(34px,8vw,76px);margin:0 0 12px;color:#ffeb3b}
+.panic-item{margin:14px 0;padding:14px;border-radius:18px;background:#1b1b1b;border:1px solid #ffeb3b}
+.panic-label{display:block;font-size:clamp(16px,3vw,24px);color:#ff9;text-transform:uppercase;font-weight:900}
+.panic-value{display:block;font-size:clamp(34px,9vw,86px);font-weight:1000;line-height:1.05}
+.panic-notes .note{font-size:clamp(22px,5vw,44px);padding:8px 12px;margin:5px;background:#ffeb3b;color:#000;font-weight:1000}
+.web-quick-links{margin-top:12px}
+.web-quick-links .controls{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.jam-primary{border:3px solid var(--accent)!important;background:#fff3d1!important;box-shadow:0 0 0 4px #8b451322}
+.jam-primary h3::before{content:"★ Progressione principale · ";color:var(--accent)}
+.progression-chords{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.chord-pill{display:inline-flex;align-items:center;justify-content:center;min-width:74px;padding:9px 12px;border-radius:999px;background:#241a13;color:#fff;font-weight:900;border:2px solid #241a13}
+.riff-box{line-height:1.55}
+body.stage-mode{font-size:19px}
+body.stage-mode main{max-width:1280px}
+body.stage-mode .panel{padding:22px;margin-bottom:20px}
+body.stage-mode h2{font-size:clamp(25px,4vw,38px)}
+body.stage-mode h3{font-size:clamp(21px,3vw,30px)}
+body.stage-mode button,body.stage-mode select,body.stage-mode input[type=file],body.stage-mode input[type=text],body.stage-mode textarea{font-size:20px;padding:14px 16px;border-width:2px}
+body.stage-mode .notes{font-size:clamp(25px,4vw,44px);line-height:1.75}
+body.stage-mode .note{min-width:52px;padding:8px 10px;margin:4px;border-width:2px}
+body.stage-mode .result{font-size:28px}
+body.stage-mode .badge{font-size:18px;padding:8px 12px}
+body.stage-mode .live-scale-card{background:#090900;border-color:#ffd54a;box-shadow:0 0 28px #ffd54a33}
+body.stage-mode .quick-group{background:#101010;border-color:#ffd54a}
+body.stage-mode .quick-group h2,body.stage-mode .quick-group h3{color:#ffd54a}
+body.stage-mode .jam-primary{background:#1f1a00!important;border-color:#ffd54a!important;box-shadow:0 0 24px #ffd54a55}
+body.stage-mode .chord-pill{background:#ffd54a;color:#000;border-color:#ffd54a;font-size:21px}
+body.stage-mode .riff-pattern{font-size:20px;line-height:1.7}
+@media (max-width:700px){
+  .live-scale-card{top:0;border-radius:0;margin-left:-18px;margin-right:-18px}
+  .live-scale-card .notes{font-size:20px}
+  .panic-card{padding:16px}
+}
+
 </style>
 </head>
 <body class="start-mode">
@@ -109,18 +166,43 @@ body.stage-mode .riff-pattern{background:#000;color:#fff7d6;border:1px solid #ff
   <div class="start-card">
     <h1>Scaloweb Pro</h1>
     <p>Vai subito alla schermata che ti serve.</p>
-    <button id="goToSuggestedScaleBtn" type="button">🎷 Scala suggerita per improvvisare</button>
-    <div class="start-links" aria-label="Collegamenti rapidi">
-      <button type="button" onclick="goToSection('impostazioniPanel')">🎯 Inserisci dati base</button>
-      <button type="button" onclick="goToSection('scalePanel')">🎼 Scale di riferimento</button>
-      <button type="button" onclick="goToSection('musicistaPanel')">🎷 Modalità musicista</button>
-      <button type="button" onclick="goToSection('jamSessionPanel')">🥁 Jam Session</button>
-      <button type="button" onclick="toggleStageMode()">🌙 Modalità palco</button>
-      <button type="button" onclick="goToSection('microfonoPanel')">🎤 Microfono</button>
-      <button type="button" onclick="goToSection('mp3Panel')">🎵 Analisi MP3</button>
-      <button type="button" onclick="goToWebKeyPanel()">🌐 Cerca tonalità da testo canzone sul web</button>
-      <button type="button" onclick="goToHarmonica()">🎶 Armonica Diatonica</button>
+    <div class="quick-group-grid" aria-label="Collegamenti rapidi raggruppati">
+      <div class="quick-group">
+        <h2>TROVA LA TONALITÀ</h2>
+        <div class="start-links">
+          <button type="button" onclick="goToSection('impostazioniPanel')">🎯 Inserisci dati base</button>
+          <button type="button" onclick="goToSection('mp3Panel')">🎵 Analisi MP3</button>
+          <button type="button" onclick="goToSection('microfonoPanel')">🎤 Microfono</button>
+          <button type="button" onclick="goToSection('audioSchedaPanel')">🖥️ Audio browser</button>
+          <button type="button" onclick="goToWebKeyPanel()">🌐 Ricerca web</button>
+        </div>
+      </div>
+      <div class="quick-group">
+        <h2>IMPROVVISA</h2>
+        <div class="start-links">
+          <button id="goToSuggestedScaleBtn" type="button">🎷 Scala suggerita per improvvisare</button>
+          <button type="button" onclick="goToSection('musicistaPanel')">🎷 Modalità musicista</button>
+          <button type="button" onclick="goToSection('jamSessionPanel')">🥁 Jam Session</button>
+          <button type="button" class="panic-button" onclick="activatePanicMode()">🚨 SONO IN PANICO</button>
+          <button type="button" onclick="toggleStageMode()">🌙 Modalità palco</button>
+        </div>
+      </div>
+      <div class="quick-group">
+        <h2>STUDIA</h2>
+        <div class="start-links">
+          <button type="button" onclick="goToSection('scalePanel')">🎼 Scale di riferimento</button>
+          <button type="button" onclick="goToHarmonica()">🎶 Armonica Diatonica</button>
+        </div>
+      </div>
     </div>
+  </div>
+</section>
+
+<section id="panicScreen" class="panic-screen" aria-live="polite">
+  <div class="panic-card">
+    <h1>🚨 SUONA ORA</h1>
+    <div id="panicContent"></div>
+    <button type="button" onclick="deactivatePanicMode()">Torna alla vista completa</button>
   </div>
 </section>
 
@@ -135,19 +217,41 @@ body.stage-mode .riff-pattern{background:#000;color:#fff7d6;border:1px solid #ff
 
 <section class="panel">
 <h2>📚 Menu rapido</h2>
-<div class="controls">
-<button type="button" onclick="tornaHome()">🏠 Home</button>
-<button type="button" onclick="goToSection('impostazioniPanel')">🎯 Inserisci dati base</button>
-<button type="button" onclick="goToSection('scalaSuggerita')">Scala suggerita</button>
-<button type="button" onclick="goToSection('scalePanel')">🎼 Scale di riferimento</button>
-<button type="button" onclick="goToSection('musicistaPanel')">🎷 Modalità musicista</button>
-<button type="button" onclick="goToSection('jamSessionPanel')">🥁 Jam Session</button>
-<button type="button" onclick="toggleStageMode()">🌙 Modalità palco</button>
-<button type="button" onclick="goToSection('microfonoPanel')">🎤 Microfono</button>
-<button type="button" onclick="goToSection('mp3Panel')">🎵 Analisi MP3</button>
-<button type="button" onclick="goToWebKeyPanel()">🌐 Cerca tonalità da testo canzone sul web</button>
-<button type="button" onclick="goToHarmonica()">🎶 Armonica Diatonica</button>
+<div class="quick-group-grid">
+  <div class="quick-group">
+    <h3>TROVA LA TONALITÀ</h3>
+    <div class="controls">
+      <button type="button" onclick="tornaHome()">🏠 Home</button>
+      <button type="button" onclick="goToSection('impostazioniPanel')">🎯 Inserisci dati base</button>
+      <button type="button" onclick="goToSection('mp3Panel')">🎵 MP3</button>
+      <button type="button" onclick="goToSection('microfonoPanel')">🎤 Microfono</button>
+      <button type="button" onclick="goToSection('audioSchedaPanel')">🖥️ Audio browser</button>
+      <button type="button" onclick="goToWebKeyPanel()">🌐 Ricerca web</button>
+    </div>
+  </div>
+  <div class="quick-group">
+    <h3>IMPROVVISA</h3>
+    <div class="controls">
+      <button type="button" onclick="goToSection('scalaSuggerita')">🎷 Scala suggerita</button>
+      <button type="button" onclick="goToSection('musicistaPanel')">🎷 Modalità musicista</button>
+      <button type="button" onclick="goToSection('jamSessionPanel')">🥁 Jam Session</button>
+      <button type="button" class="panic-button" onclick="activatePanicMode()">🚨 SONO IN PANICO</button>
+      <button type="button" onclick="toggleStageMode()">🌙 Modalità palco</button>
+    </div>
+  </div>
+  <div class="quick-group">
+    <h3>STUDIA</h3>
+    <div class="controls">
+      <button type="button" onclick="goToSection('scalePanel')">🎼 Scale</button>
+      <button type="button" onclick="goToHarmonica()">🎶 Armonica</button>
+    </div>
+  </div>
 </div>
+</section>
+
+<section id="liveScaleCard" class="panel live-scale-card" aria-live="polite">
+  <h2>🎯 SUONA QUESTA SCALA</h2>
+  <div id="liveScaleContent"></div>
 </section>
 
 <section id="impostazioniPanel" class="panel">
@@ -315,6 +419,15 @@ body.stage-mode .riff-pattern{background:#000;color:#fff7d6;border:1px solid #ff
     <div>
       <label>&nbsp;</label>
       <button id="openWebSearchBtn" class="secondary">Apri ricerca web</button>
+    </div>
+  </div>
+  <div class="web-quick-links">
+    <p class="hint">Link rapidi compilati automaticamente con titolo e artista:</p>
+    <div class="controls">
+      <div><button type="button" class="secondary" onclick="openQuickSongSearch('google')">Google</button></div>
+      <div><button type="button" class="secondary" onclick="openQuickSongSearch('ultimate')">Ultimate Guitar</button></div>
+      <div><button type="button" class="secondary" onclick="openQuickSongSearch('chordify')">Chordify</button></div>
+      <div><button type="button" class="secondary" onclick="openQuickSongSearch('songbpm')">SongBPM</button></div>
     </div>
   </div>
   <p class="hint">Per motivi di sicurezza del browser, questo file HTML non può leggere automaticamente Google o siti di accordi senza un servizio esterno/API. La funzione prepara ricerche mirate; quando trovi la tonalità, clicca la nota corrispondente sotto.</p>
@@ -1094,7 +1207,7 @@ function renderJamSession(){
        <span class="badge">Stile: <b>${resolvedStyle}</b></span></p>
     <h3>Progressioni suggerite</h3>
     <div class="grid">
-      ${list.map(x=>progressionToHTML(view.root, quality, x[0], x[1], x[2])).join("")}
+      ${list.map((x,idx)=>progressionToHTML(view.root, quality, x[0], x[1], x[2], idx===0)).join("")}
     </div>
     <h3>Riff suggeriti utilizzabili</h3>
     <div class="grid">
@@ -1116,6 +1229,7 @@ function toggleStageMode(){
   document.body.classList.toggle("stage-mode");
   const btn = document.getElementById("stageModeBtn");
   if(btn) btn.textContent = document.body.classList.contains("stage-mode") ? "☀️ Modalità normale" : "🌙 Modalità palco";
+  savePrefs();
 }
 
 function performanceAdvice(){
@@ -1161,6 +1275,92 @@ function showMusicalAlternatives(){
     </div>`;
 }
 
+const AUTO_SAVE_KEY = "scalowebProPrefs_v2";
+
+function getRecommendedScaleData(){
+  const view = currentViewData();
+  const quality = document.getElementById("keyQuality").value;
+  const genre = GENRES[genreSelect.value] || GENRES.pop;
+  const list = quality==="minor" ? genre.minor : genre.major;
+  const main = list[0];
+  return {view, quality, genre, main};
+}
+
+function updateLiveScaleCard(){
+  const box = document.getElementById("liveScaleContent");
+  if(!box) return;
+  const data = getRecommendedScaleData();
+  box.innerHTML = `
+    <div class="live-scale-main">
+      <div><span class="small">Tonalità attuale</span><br><span class="result">${NAMES[data.view.root]} ${qualityName(data.quality)}</span></div>
+      <div><span class="small">Scala consigliata</span><br><span class="result">${NAMES[data.view.root]} ${data.main[0]}</span></div>
+      <div><span class="small">Vista</span><br><span class="badge">${viewModeLabel(data.view.mode)}</span></div>
+    </div>
+    <div class="notes" style="margin-top:8px">${renderNoteSet(data.view.root, data.main[1])}</div>
+    <p class="hint">Genere: ${data.genre.label}. Si aggiorna con tonalità, modo, genere e trasposizione.</p>`;
+}
+
+function updatePanicScreen(){
+  const box = document.getElementById("panicContent");
+  if(!box) return;
+  const data = getRecommendedScaleData();
+  box.innerHTML = `
+    <div class="panic-item"><span class="panic-label">TONALITÀ</span><span class="panic-value">${NAMES[data.view.root]} ${qualityName(data.quality)}</span></div>
+    <div class="panic-item"><span class="panic-label">SCALA CONSIGLIATA</span><span class="panic-value">${NAMES[data.view.root]} ${data.main[0]}</span></div>
+    <div class="panic-item panic-notes"><span class="panic-label">NOTE PRINCIPALI</span><div>${renderNoteSet(data.view.root, data.main[1])}</div></div>`;
+}
+
+function activatePanicMode(){
+  render();
+  document.body.classList.remove("start-mode");
+  document.body.classList.add("panic-mode");
+  updatePanicScreen();
+}
+
+function deactivatePanicMode(){
+  document.body.classList.remove("panic-mode");
+  render();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function savePrefs(){
+  try{
+    const prefs = {
+      tonic: document.getElementById("tonic").value,
+      keyQuality: document.getElementById("keyQuality").value,
+      viewMode: document.getElementById("viewMode").value,
+      genreSelect: document.getElementById("genreSelect").value,
+      stageMode: document.body.classList.contains("stage-mode")
+    };
+    localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(prefs));
+  }catch(e){}
+}
+
+function restorePrefs(){
+  try{
+    const raw = localStorage.getItem(AUTO_SAVE_KEY);
+    if(!raw) return;
+    const prefs = JSON.parse(raw);
+    [["tonic","tonic"],["keyQuality","keyQuality"],["viewMode","viewMode"],["genreSelect","genreSelect"]].forEach(([id,key])=>{
+      const el = document.getElementById(id);
+      if(el && prefs[key] !== undefined) el.value = prefs[key];
+    });
+    if(prefs.stageMode) document.body.classList.add("stage-mode");
+    const btn = document.getElementById("stageModeBtn");
+    if(btn) btn.textContent = document.body.classList.contains("stage-mode") ? "☀️ Modalità normale" : "🌙 Modalità palco";
+  }catch(e){}
+}
+
+function openQuickSongSearch(kind){
+  const base = buildSongQuery();
+  const out = document.getElementById("webSearchResult");
+  if(!base){
+    if(out) out.innerHTML = `<p class="result">Inserisci titolo e artista per aprire i link rapidi.</p>`;
+    return;
+  }
+  window.open(searchURL(base, kind), "_blank", "noopener");
+}
+
 function render(){
   const concert = +tonicSel.value;
   const quality = document.getElementById("keyQuality").value;
@@ -1189,6 +1389,9 @@ function render(){
     box.appendChild(div);
   });
   if(document.getElementById("jamSessionResult")) renderJamSession();
+  updateLiveScaleCard();
+  updatePanicScreen();
+  savePrefs();
 }
 document.getElementById("renderBtn").onclick = () => {
   render();
@@ -1220,6 +1423,7 @@ function searchURL(query, kind){
   if(kind==="chords") return `https://www.google.com/search?q=${q}+accordi+tonalità`;
   if(kind==="ultimate") return `https://www.google.com/search?q=${q}+site%3Aultimate-guitar.com+chords+key`;
   if(kind==="chordify") return `https://www.google.com/search?q=${q}+site%3Achordify.net+key+chords`;
+  if(kind==="songbpm") return `https://songbpm.com/searches/${q}`;
   return `https://www.google.com/search?q=${q}`;
 }
 function prepareWebKeySearch(){
@@ -1232,10 +1436,11 @@ function prepareWebKeySearch(){
   const genre = GENRES[genreSelect.value] || GENRES.pop;
   const query = `${base} tonalità accordi key ${genre.label}`;
   const links = [
-    ["Ricerca generale tonalità", searchURL(query,"google")],
+    ["Google", searchURL(query,"google")],
     ["Accordi + tonalità", searchURL(base,"chords")],
     ["Ultimate Guitar", searchURL(base,"ultimate")],
-    ["Chordify", searchURL(base,"chordify")]
+    ["Chordify", searchURL(base,"chordify")],
+    ["SongBPM", searchURL(base,"songbpm")]
   ];
   out.innerHTML = `
     <p class="result">Ricerca pronta per: ${base}<br><span class="small">Genere selezionato: ${genre.label}. Le scale suggerite si aggiorneranno automaticamente quando imposti la tonalità trovata.</span></p>
@@ -1270,6 +1475,7 @@ function openWebKeySearch(){
 document.getElementById("prepareWebSearchBtn").onclick = prepareWebKeySearch;
 document.getElementById("openWebSearchBtn").onclick = openWebKeySearch;
 
+restorePrefs();
 toggleWebKeySearch();
 render();
 
