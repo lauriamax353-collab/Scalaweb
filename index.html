@@ -175,6 +175,21 @@ body.stage-mode .riff-pattern{font-size:20px;line-height:1.7}
   .mic-permission-box{position:relative;z-index:2}
 }
 
+
+/* I Consigli di AI: modulo pratico non distruttivo */
+.ai-advice-card{border:2px solid #5f3b16;background:#fff8e8}
+.ai-advice-hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:10px 0 14px}
+.ai-advice-chip{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px}
+.ai-advice-chip .small{display:block;margin-bottom:4px}
+.ai-advice-list{margin:8px 0 0;padding-left:20px;line-height:1.55}
+.ai-advice-list li{margin:6px 0}
+.ai-advice-focus{border-left:6px solid var(--accent);padding:12px 14px;background:#fff3d1;border-radius:12px;margin:12px 0}
+.ai-advice-exercise{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:10px}
+.ai-advice-exercise .scale{margin:0}
+body.stage-mode .ai-advice-card{background:#15110a;border-color:#ffd54a}
+body.stage-mode .ai-advice-chip,body.stage-mode .ai-advice-focus{background:#090900;border-color:#ffd54a;color:#fff7d6}
+body.stage-mode .ai-advice-list{font-size:21px}
+
 </style>
 </head>
 <body class="start-mode">
@@ -200,6 +215,7 @@ body.stage-mode .riff-pattern{font-size:20px;line-height:1.7}
           <button id="goToSuggestedScaleBtn" type="button">🎷 Scala suggerita per improvvisare</button>
           <button type="button" onclick="goToSection('musicistaPanel')">🎷 Modalità musicista</button>
           <button type="button" onclick="goToSection('jamSessionPanel')">🥁 Jam Session</button>
+          <button type="button" onclick="goToAIAdvice()">🤖 I Consigli di AI</button>
           <button type="button" class="panic-button" onclick="activatePanicMode()">🚨 SONO IN PANICO</button>
           <button type="button" onclick="toggleStageMode()">🌙 Modalità palco</button>
         </div>
@@ -252,6 +268,7 @@ body.stage-mode .riff-pattern{font-size:20px;line-height:1.7}
       <button type="button" onclick="goToSection('scalaSuggerita')">🎷 Scala suggerita</button>
       <button type="button" onclick="goToSection('musicistaPanel')">🎷 Modalità musicista</button>
       <button type="button" onclick="goToSection('jamSessionPanel')">🥁 Jam Session</button>
+      <button type="button" onclick="goToAIAdvice()">🤖 I Consigli di AI</button>
       <button type="button" class="panic-button" onclick="activatePanicMode()">🚨 SONO IN PANICO</button>
       <button type="button" onclick="toggleStageMode()">🌙 Modalità palco</button>
     </div>
@@ -378,12 +395,6 @@ body.stage-mode .riff-pattern{font-size:20px;line-height:1.7}
       <button id="stopMicBtn" class="secondary" disabled>Ferma microfono</button>
     </div>
   </div>
-  <div class="mic-permission-box" id="micPermissionBox">
-    <div class="mic-permission-actions">
-      <button id="requestMicPermissionBtn" type="button">🎤 Richiedi autorizzazione microfono</button>
-      <span id="micPermissionStatus" class="small">Su telefono premi qui se il browser non ha ancora chiesto il permesso.</span>
-    </div>
-  </div>
   <p class="hint">Obiettivo pratico: trovare scale sicure per improvvisare, non una “verità assoluta”. I primi istanti calibrano il rumore ambientale; poi fai ascoltare un giro armonico con basso/accordi. Se sente solo melodia proporrà pentatoniche e alternative verificabili a orecchio.</p>
   <div id="micStatus" class="small"></div>
   <div class="meter"><div id="micProgressBar" class="bar"></div></div>
@@ -483,6 +494,23 @@ body.stage-mode .riff-pattern{font-size:20px;line-height:1.7}
     </div>
   </div>
   <div id="performanceAdvice"></div>
+</section>
+
+
+<section id="aiAdvicePanel" class="panel ai-advice-card">
+  <div class="section-title-row"><h2>🤖 I Consigli di AI</h2><button class="section-home secondary" type="button" onclick="tornaHome()">🏠 Home</button></div>
+  <p class="hint">Consigli pratici generati dai comandi inseriti: tonalità, modo, genere, vista DO/Sib/Mib e scala consigliata. Funziona offline e non modifica l'analisi musicale.</p>
+  <div class="controls">
+    <div>
+      <label>&nbsp;</label>
+      <button id="refreshAIAdviceBtn" type="button" onclick="renderAIAdvice()">Aggiorna consigli AI</button>
+    </div>
+    <div>
+      <label>&nbsp;</label>
+      <button type="button" class="secondary" onclick="goToSection('jamSessionPanel'); renderJamSession();">Apri Jam Session collegata</button>
+    </div>
+  </div>
+  <div id="aiAdviceResult"></div>
 </section>
 
 <section id="jamSessionPanel" class="panel">
@@ -1384,6 +1412,112 @@ function openQuickSongSearch(kind){
   window.open(searchURL(base, kind), "_blank", "noopener");
 }
 
+function aiPhraseProfile(quality, genreKey){
+  const isMinor = quality === "minor";
+  const genreMap = {
+    blues: {
+      feel:"call & response: una frase breve e una risposta",
+      rhythm:"terzine, shuffle o frasi leggermente sporche",
+      caution:"non correre: lascia spazio dopo ogni lick"
+    },
+    jazz: {
+      feel:"frasi che puntano alle note dell'accordo",
+      rhythm:"crome swing e risoluzioni sul battere",
+      caution:"evita di suonare solo scale: crea piccole linee verso 3ª e 7ª"
+    },
+    funk: {
+      feel:"riff corti, ripetuti e molto ritmici",
+      rhythm:"sedicesimi, pause e accenti sincopati",
+      caution:"poche note, molto groove"
+    },
+    latin: {
+      feel:"linee cantabili e legate",
+      rhythm:"frasi morbide che rispettano la clave o il portamento bossa",
+      caution:"non riempire tutti gli spazi: fai respirare la melodia"
+    },
+    rock: {
+      feel:"frasi dirette, bending/slide e note lunghe",
+      rhythm:"ottavi forti, pause nette e risposte aggressive",
+      caution:"atterra spesso su tonica o quinta"
+    },
+    country: {
+      feel:"frasi cantabili con risposta pentatonica",
+      rhythm:"ottavi chiari, piccoli anticipi e chiusure pulite",
+      caution:"la pentatonica maggiore è la base più sicura"
+    },
+    reggae: {
+      feel:"melodie semplici e spazio tra le frasi",
+      rhythm:"frasi in levare e risposte brevi",
+      caution:"suona meno note e punta alla cantabilità"
+    },
+    pop: {
+      feel:"frasi semplici, riconoscibili e cantabili",
+      rhythm:"domanda/risposta in 2 o 4 battute",
+      caution:"meglio poche note memorabili che molte note corrette"
+    }
+  };
+  return genreMap[genreKey] || genreMap.pop;
+}
+
+function renderAIAdvice(){
+  const box = document.getElementById("aiAdviceResult");
+  if(!box) return;
+  const data = getRecommendedScaleData();
+  const root = data.view.root;
+  const quality = data.quality;
+  const genreKey = genreSelect.value || "pop";
+  const profile = aiPhraseProfile(quality, genreKey);
+  const safeInts = data.main[1] || (quality === "minor" ? [0,3,5,7,10] : [0,2,4,7,9]);
+  const restInts = quality === "minor" ? [0,3,7] : [0,4,7];
+  const tensionInts = quality === "minor" ? [10,6,2] : [10,6,5];
+  const firstThree = safeInts.slice(0, Math.min(5, safeInts.length));
+  const jamStyle = (typeof jamStyleFromGenre === "function") ? jamStyleFromGenre() : genreKey;
+  const nextMove = quality === "minor"
+    ? "inizia su 1 o ♭3, passa da 4/5 e chiudi su ♭7 o 1"
+    : "inizia su 1 o 3, usa 5/6 per aprire e chiudi su 1 o 3";
+  box.innerHTML = `
+    <div class="ai-advice-hero">
+      <div class="ai-advice-chip"><span class="small">Tonalità / vista</span><b class="result">${NAMES[root]} ${qualityName(quality)}</b><br><span class="small">${viewModeLabel(data.view.mode)}</span></div>
+      <div class="ai-advice-chip"><span class="small">Scala da usare ora</span><b class="result">${NAMES[root]} ${data.main[0]}</b></div>
+      <div class="ai-advice-chip"><span class="small">Genere letto dai comandi</span><b>${data.genre.label}</b><br><span class="small">Jam: ${jamStyle}</span></div>
+    </div>
+    <div class="scale">
+      <h3>🎯 Note subito pronte</h3>
+      <div class="notes">${renderNoteSet(root, firstThree)}</div>
+      <p class="hint">Parti da queste, poi allarga gradualmente alla scala completa.</p>
+    </div>
+    <div class="ai-advice-focus">
+      <b>Consiglio pratico:</b> ${profile.feel}. ${nextMove}. ${profile.caution}.
+    </div>
+    <div class="ai-advice-exercise">
+      <div class="scale">
+        <h3>Note di arrivo/riposo</h3>
+        <div class="notes">${renderNoteSet(root, restInts)}</div>
+        <p class="hint">Usale per concludere la frase senza sembrare “fuori”.</p>
+      </div>
+      <div class="scale">
+        <h3>Note colore/tensione</h3>
+        <div class="notes">${renderNoteSet(root, tensionInts)}</div>
+        <p class="hint">Toccale e risolvi: non restarci fermo troppo a lungo.</p>
+      </div>
+    </div>
+    <div class="scale" style="margin-top:12px">
+      <h3>Piano di improvvisazione in 4 passi</h3>
+      <ol class="ai-advice-list">
+        <li><b>Prima entrata:</b> suona una frase di 3–5 note usando solo le note pronte.</li>
+        <li><b>Risposta:</b> ripeti la stessa idea cambiando solo l'ultima nota.</li>
+        <li><b>Ritmo:</b> usa ${profile.rhythm}; il ritmo deve guidare più delle note.</li>
+        <li><b>Chiusura:</b> atterra su una nota di riposo quando il giro torna alla tonica.</li>
+      </ol>
+    </div>`;
+}
+
+function goToAIAdvice(){
+  render();
+  renderAIAdvice();
+  goToSection('aiAdvicePanel');
+}
+
 function render(){
   const concert = +tonicSel.value;
   const quality = document.getElementById("keyQuality").value;
@@ -1414,6 +1548,7 @@ function render(){
   if(document.getElementById("jamSessionResult")) renderJamSession();
   updateLiveScaleCard();
   updatePanicScreen();
+  renderAIAdvice();
   savePrefs();
 }
 document.getElementById("renderBtn").onclick = () => {
