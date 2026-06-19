@@ -166,6 +166,15 @@ body.stage-mode .riff-pattern{font-size:20px;line-height:1.7}
   .panic-card{padding:16px}
 }
 
+
+.mic-permission-box{margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fffdf6}
+.mic-permission-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#requestMicPermissionBtn{font-weight:800}
+@media (max-width:700px){
+  .mic-permission-actions button{width:100%;font-size:18px;padding:14px 16px}
+  .mic-permission-box{position:relative;z-index:2}
+}
+
 </style>
 </head>
 <body class="start-mode">
@@ -367,6 +376,12 @@ body.stage-mode .riff-pattern{font-size:20px;line-height:1.7}
     <div>
       <label>&nbsp;</label>
       <button id="stopMicBtn" class="secondary" disabled>Ferma microfono</button>
+    </div>
+  </div>
+  <div class="mic-permission-box" id="micPermissionBox">
+    <div class="mic-permission-actions">
+      <button id="requestMicPermissionBtn" type="button">🎤 Richiedi autorizzazione microfono</button>
+      <span id="micPermissionStatus" class="small">Su telefono premi qui se il browser non ha ancora chiesto il permesso.</span>
     </div>
   </div>
   <p class="hint">Obiettivo pratico: trovare scale sicure per improvvisare, non una “verità assoluta”. I primi istanti calibrano il rumore ambientale; poi fai ascoltare un giro armonico con basso/accordi. Se sente solo melodia proporrà pentatoniche e alternative verificabili a orecchio.</p>
@@ -2001,6 +2016,83 @@ function addSpectralChromaFromAnalyser(analyser, audioCtx, chroma, bassChroma, o
   return {added, frameEnergy, frameChroma, bassPc: bassPeak.value > 0.22 ? bassPeak.idx : null, peakDb: peak, gateDb: gate};
 }
 
+
+function setMicPermissionStatus(msg){
+  const el = document.getElementById("micPermissionStatus");
+  if(el) el.textContent = msg;
+}
+
+async function readMicrophonePermissionState(){
+  if(!navigator.permissions || !navigator.permissions.query) return "unknown";
+  try{
+    const res = await navigator.permissions.query({name:"microphone"});
+    return res && res.state ? res.state : "unknown";
+  }catch(_){
+    return "unknown";
+  }
+}
+
+async function requestMicrophonePermissionOnly(){
+  const micStatus = document.getElementById("micStatus");
+  if(!isLocalOrSecure()){
+    const msg = "Il microfono richiede HTTPS o localhost. Da cellulare apri la pagina con indirizzo https://, non come file locale.";
+    setMicPermissionStatus(msg);
+    if(micStatus) micStatus.textContent = msg;
+    return false;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    const msg = "Microfono non supportato da questo browser. Aggiorna Safari/Chrome oppure controlla i permessi del sito.";
+    setMicPermissionStatus(msg);
+    if(micStatus) micStatus.textContent = msg;
+    return false;
+  }
+
+  const before = await readMicrophonePermissionState();
+  if(before === "granted"){
+    const msg = "Microfono già autorizzato. Ora puoi premere “Ascolta e suggerisci scale”.";
+    setMicPermissionStatus(msg);
+    if(micStatus) micStatus.textContent = msg;
+    return true;
+  }
+
+  setMicPermissionStatus(isProbablyMobileDevice()
+    ? "Richiesta in corso: quando compare il popup del telefono premi Consenti."
+    : "Richiesta autorizzazione microfono in corso...");
+  if(micStatus) micStatus.textContent = "Richiedo autorizzazione microfono...";
+
+  try{
+    const stream = await openMicrophoneStream();
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    const msg = "Microfono autorizzato. Ora puoi avviare l’analisi.";
+    setMicPermissionStatus(msg);
+    if(micStatus) micStatus.textContent = msg;
+    return true;
+  }catch(err){
+    const state = await readMicrophonePermissionState();
+    let msg = browserMicErrorMessage(err);
+    if(state === "denied"){
+      msg += " Il browser non può mostrare di nuovo il popup finché il permesso resta bloccato: dal telefono apri le impostazioni del sito e imposta Microfono su Consenti, poi ricarica la pagina.";
+    }else if(isProbablyMobileDevice()){
+      msg += " Su telefono il popup compare solo dopo un tap diretto sul pulsante.";
+    }
+    setMicPermissionStatus(msg);
+    if(micStatus) micStatus.textContent = msg;
+    return false;
+  }
+}
+
+async function refreshMicrophonePermissionHint(){
+  const state = await readMicrophonePermissionState();
+  if(state === "granted"){
+    setMicPermissionStatus("Microfono già autorizzato.");
+  }else if(state === "denied"){
+    setMicPermissionStatus("Microfono bloccato: abilitalo dalle impostazioni del sito/browser, poi torna qui.");
+  }else{
+    setMicPermissionStatus("Su telefono premi qui se il browser non ha ancora chiesto il permesso.");
+  }
+}
+
+
 async function startMicAnalysis(){
   const status = document.getElementById("micStatus");
   const result = document.getElementById("micResult");
@@ -2027,12 +2119,16 @@ async function startMicAnalysis(){
     return;
   }
 
-  status.textContent = "Richiedo accesso al microfono...";
+  status.textContent = isProbablyMobileDevice()
+    ? "Richiedo accesso al microfono: se compare il popup premi Consenti."
+    : "Richiedo accesso al microfono...";
+  setMicPermissionStatus("Sto usando il microfono per l’analisi...");
   document.getElementById("startMicBtn").disabled = true;
   document.getElementById("stopMicBtn").disabled = false;
 
   try{
     micStream = await openMicrophoneStream();
+    setMicPermissionStatus("Microfono autorizzato e attivo.");
     micCtx = await createRunningAudioContext();
 
     const source = micCtx.createMediaStreamSource(micStream);
@@ -2091,7 +2187,9 @@ async function startMicAnalysis(){
     }
     tick();
   }catch(err){
-    status.textContent = "Microfono non disponibile: " + browserMicErrorMessage(err);
+    const friendlyMicError = browserMicErrorMessage(err);
+    status.textContent = "Microfono non disponibile: " + friendlyMicError;
+    setMicPermissionStatus(friendlyMicError);
     setMicProgress(0);
     stopMicTracks();
   }
@@ -2378,6 +2476,16 @@ function finishTabAudioAnalysis(){
   document.getElementById("useDetectedBtn").disabled = false;
   status.textContent = "Analisi audio scheda completata: mostro scale utili per improvvisare.";
   result.innerHTML = buildImprovResultHTML(top, "scheda/browser", confidence, tabAudioVoiced < 8);
+}
+
+const requestMicPermissionBtn = document.getElementById("requestMicPermissionBtn");
+if(requestMicPermissionBtn){
+  requestMicPermissionBtn.onclick = requestMicrophonePermissionOnly;
+  requestMicPermissionBtn.addEventListener("touchend", function(ev){
+    ev.preventDefault();
+    requestMicrophonePermissionOnly();
+  }, {passive:false});
+  refreshMicrophonePermissionHint();
 }
 
 document.getElementById("startMicBtn").onclick = startMicAnalysis;
